@@ -10,6 +10,7 @@ import TrackReports from './pages/TrackReports';
 import Chatbot from './pages/Chatbot';
 import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
+import Donation from './pages/Donation';
 
 function App() {
   return (
@@ -51,6 +52,13 @@ function App() {
             <ProtectedRoute>
               <Navbar />
               <Leaderboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/donations" element={
+            <ProtectedRoute>
+              <Navbar />
+              <Donation />
             </ProtectedRoute>
           } />
           

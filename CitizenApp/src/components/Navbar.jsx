@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Home, FileText, MapPin, MessageCircle, Trophy, User, LogOut } from 'lucide-react';
+import { Home, FileText, MapPin, MessageCircle, Trophy, User, LogOut, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Navbar() {
@@ -20,8 +20,9 @@ export default function Navbar() {
     { path: '/', icon: Home, label: 'Home' },
     { path: '/report', icon: FileText, label: 'Report' },
     { path: '/track', icon: MapPin, label: 'Track' },
-    { path: '/chatbot', icon: MessageCircle, label: 'Chatbot' },
-    { path: '/leaderboard', icon: Trophy, label: 'Leaderboard' },
+    { path: '/donations', icon: Heart, label: 'Donate' },
+    { path: '/chatbot', icon: MessageCircle, label: 'Chat' },
+    { path: '/leaderboard', icon: Trophy, label: 'Board' },
     { path: '/profile', icon: User, label: 'Profile' },
   ];
 
@@ -29,7 +30,7 @@ export default function Navbar() {
     <motion.nav 
       initial={{ y: -100 }}
       animate={{ y: 0 }}
-      className="fixed top-0 left-0 right-0 w-full z-100 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg"
+      className="fixed top-0 left-0 right-0 w-full z-50 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white shadow-lg"
     >
       <div className="flex justify-between items-center px-4 md:px-8 py-4">
         <motion.div whileHover={{ scale: 1.05 }} className="text-2xl font-bold">
@@ -66,11 +67,11 @@ export default function Navbar() {
         </div>
 
         {/* Mobile bottom nav */}
-        <div className="fixed bottom-0 left-0 right-0 md:hidden bg-gradient-to-r from-blue-600 to-purple-600 border-t border-white/10 flex justify-around">
+        <div className="fixed bottom-0 left-0 right-0 md:hidden bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 border-t border-white/10 flex justify-around">
           {navLinks.map((link) => (
             <Link key={link.path} to={link.path} className="flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium hover:bg-white/10 transition-all">
-              <link.icon size={20} />
-              {link.label}
+              <link.icon size={18} />
+              <span className="hidden sm:inline">{link.label}</span>
             </Link>
           ))}
         </div>
