@@ -1,0 +1,315 @@
+# 🎯 EXACT DATABASE BUILD COMMANDS
+
+## Copy-Paste These Commands Exactly
+
+### Open Command Prompt (Windows)
+
+1. Press `Windows Key + R`
+2. Type `cmd` and press Enter
+3. Type commands below
+
+---
+
+## 🔴 STEP 1: Start MySQL Service
+
+```bash
+net start MySQL80
+```
+
+**Wait 2-3 seconds for it to start**
+
+---
+
+## 🟡 STEP 2: Create Database (Choose ONE method)
+
+### METHOD A: Single Command (Recommended)
+
+```bash
+mysql -u root -p < "d:\Minor Project\database\schema.sql"
+```
+
+**It will ask:** `Enter password:`
+**Just press Enter** (no password set by default)
+
+**Wait 10-20 seconds for all tables to be created**
+
+---
+
+### METHOD B: If METHOD A Fails
+
+Try with forward slashes:
+
+```bash
+mysql -u root -p < "d:/Minor Project/database/schema.sql"
+```
+
+---
+
+### METHOD C: Step Inside Folder First
+
+```bash
+cd d:\Minor Project\database
+mysql -u root -p < schema.sql
+```
+
+**Press Enter when asked for password**
+
+---
+
+## 🟢 STEP 3: Verify Everything Was Created
+
+```bash
+mysql -u root -p citizen_app_db -e "SHOW TABLES;"
+```
+
+**Press Enter when asked for password**
+
+**Expected Output:**
+```
++--------------------------+
+| Tables_in_citizen_app_db |
++--------------------------+
+| donations                |
+| notifications            |
+| report_comments          |
+| reports                  |
+| users                    |
++--------------------------+
+5 rows in set (0.00 sec)
+```
+
+---
+
+## 🔵 STEP 4: Verify Data Was Inserted
+
+```bash
+mysql -u root -p citizen_app_db -e "SELECT name, email, points FROM users;"
+```
+
+**Expected Output:**
+```
++---------------+-----------------------+--------+
+| name          | email                 | points |
++---------------+-----------------------+--------+
+| John Citizen  | citizen1@example.com  |    150 |
+| Jane Citizen  | citizen2@example.com  |    280 |
+| Mike Worker   | worker1@example.com   |    450 |
+| Sarah Worker  | worker2@example.com   |    320 |
+| Admin User    | admin@example.com     |   1000 |
++---------------+-----------------------+--------+
+```
+
+---
+
+## ✅ STEP 5: Verify Reports Table Has location_text
+
+```bash
+mysql -u root -p citizen_app_db -e "DESCRIBE reports;" | findstr location
+```
+
+**Should show:**
+```
+location_text       varchar(500)    YES     NULL    NULL    NULL
+latitude            decimal(10,8)   YES     NULL    NULL    NULL
+longitude           decimal(11,8)   YES     NULL    NULL    NULL
+```
+
+---
+
+## 🎯 All 5 Verification Checks
+
+Run these one by one to confirm everything:
+
+```bash
+# Check 1: Database exists
+mysql -u root -p -e "SHOW DATABASES;" | findstr citizen
+
+# Check 2: All 5 tables exist
+mysql -u root -p citizen_app_db -e "SHOW TABLES;"
+
+# Check 3: Users table has data
+mysql -u root -p citizen_app_db -e "SELECT COUNT(*) FROM users;"
+
+# Check 4: location_text column exists
+mysql -u root -p citizen_app_db -e "DESCRIBE reports;" | findstr location_text
+
+# Check 5: Views exist
+mysql -u root -p citizen_app_db -e "SHOW VIEWS;"
+```
+
+---
+
+## 🚀 Next: Start Backend (In New Terminal)
+
+```bash
+cd d:\Minor Project\backend
+
+python -m venv venv
+
+venv\Scripts\activate
+
+pip install -r requirements.txt
+
+copy .env.example .env
+
+python -m uvicorn main:app --reload
+```
+
+**Should show:**
+```
+Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+```
+
+---
+
+## 🌐 Test API (In Browser)
+
+Open this URL:
+```
+http://localhost:8000/docs
+```
+
+You should see:
+- FastAPI Swagger UI
+- All API endpoints listed
+- Interactive testing interface
+
+---
+
+## 📊 Sample API Calls
+
+### Get All Users
+```bash
+curl http://localhost:8000/api/users/
+```
+
+### Get Leaderboard
+```bash
+curl http://localhost:8000/api/users/leaderboard/top
+```
+
+### Create Report
+```bash
+curl -X POST http://localhost:8000/api/reports/ ^
+  -H "Content-Type: application/json" ^
+  -d "{\"category\":\"Pothole\",\"description\":\"Test report\",\"location_text\":\"Mumbai, Maharashtra, India\",\"city\":\"Mumbai\",\"state\":\"Maharashtra\",\"country\":\"India\"}"
+```
+
+---
+
+## ⚠️ Troubleshooting
+
+### Issue: "Access denied for user 'root'@'localhost'"
+
+**Solution:** Try without password flag
+```bash
+mysql -u root < "d:\Minor Project\database\schema.sql"
+```
+
+---
+
+### Issue: "Can't find file"
+
+**Solution:** Use forward slashes or full path
+```bash
+mysql -u root -p < "d:/Minor Project/database/schema.sql"
+```
+
+---
+
+### Issue: "Can't connect to MySQL server"
+
+**Solution:** Start service first
+```bash
+net start MySQL80
+```
+
+---
+
+### Issue: "The specified database does not exist"
+
+**Solution:** Run schema script again
+```bash
+mysql -u root -p < "d:\Minor Project\database\schema.sql"
+```
+
+---
+
+### Issue: "Port 3306 already in use"
+
+**Solution:** Check if MySQL is running
+```bash
+netstat -ano | findstr :3306
+```
+
+If running multiple instances, stop one:
+```bash
+net stop MySQL80
+```
+
+---
+
+## 🎓 What Each Command Does
+
+| Command | Purpose |
+|---------|---------|
+| `net start MySQL80` | Starts MySQL service |
+| `mysql -u root -p` | Connects to MySQL |
+| `< schema.sql` | Reads and executes SQL file |
+| `citizen_app_db` | Selects database to use |
+| `SHOW TABLES;` | Lists all tables |
+| `DESCRIBE reports;` | Shows table structure |
+| `SELECT * FROM users;` | Gets all users |
+
+---
+
+## 📋 Complete Checklist
+
+- [ ] MySQL service started (`net start MySQL80`)
+- [ ] Schema executed (`mysql -u root -p < schema.sql`)
+- [ ] All 5 tables created (verify: `SHOW TABLES;`)
+- [ ] Sample data loaded (verify: `SELECT * FROM users;`)
+- [ ] location_text column exists (verify: `DESCRIBE reports;`)
+- [ ] Backend installed (`pip install -r requirements.txt`)
+- [ ] .env file created (`copy .env.example .env`)
+- [ ] Backend running (`python -m uvicorn main:app --reload`)
+- [ ] API docs accessible (`http://localhost:8000/docs`)
+- [ ] Frontend running (`npm run dev` in CitizenApp)
+
+---
+
+## 🎉 Success!
+
+When you see:
+```
+Uvicorn running on http://127.0.0.1:8000
+```
+
+And can access:
+```
+http://localhost:8000/docs
+```
+
+**Your database and backend are ready!** ✨
+
+---
+
+## 📱 Next: Start Frontend
+
+In another terminal:
+
+```bash
+cd d:\Minor Project\CitizenApp
+
+npm run dev
+```
+
+Then open:
+```
+http://localhost:5173
+```
+
+---
+
+**That's it! Everything is set up!** 🚀
+
