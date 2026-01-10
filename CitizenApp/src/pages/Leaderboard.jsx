@@ -1,12 +1,27 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Trophy, Star, Award, TrendingUp, Medal } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
+
+const BACKEND_URL = 'http://localhost:8000';
+
+// Helper function to get proper image URL
+function getImageUrl(photoURL) {
+  if (!photoURL) return null;
+  if (photoURL.startsWith('/uploads/')) {
+    return `${BACKEND_URL}${photoURL}`;
+  }
+  return photoURL;
+}
 
 export default function Leaderboard() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { darkMode, colors } = useTheme();
+  const { t } = useLanguage();
 
   useEffect(() => {
     fetchRankings();
@@ -14,20 +29,52 @@ export default function Leaderboard() {
 
   async function fetchRankings() {
     try {
-      const q = query(collection(db, 'users'), orderBy('points', 'desc'));
+      // Fetch all users
+      const q = query(collection(db, 'users'));
       const querySnapshot = await getDocs(q);
       
-      const usersData = querySnapshot.docs.map((doc, index) => ({
-        id: doc.id,
-        ...doc.data(),
-        rank: index + 1,
-        badge: getBadge(doc.data().points)
-      }));
+      // Create a map to aggregate points by email (unique identifier)
+      const userMap = new Map();
       
-      setUsers(usersData);
+      querySnapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const email = data.email;
+        
+        if (email) {
+          if (userMap.has(email)) {
+            // User exists, sum the points
+            const existing = userMap.get(email);
+            userMap.set(email, {
+              ...existing,
+              points: (existing.points || 0) + (data.points || 0),
+              reportsSubmitted: (existing.reportsSubmitted || 0) + (data.reportsSubmitted || 0)
+            });
+          } else {
+            // New user, add to map
+            userMap.set(email, {
+              id: doc.id,
+              email: email,
+              displayName: data.displayName || email.split('@')[0],
+              photoURL: data.photoURL || null,
+              points: data.points || 0,
+              reportsSubmitted: data.reportsSubmitted || 0
+            });
+          }
+        }
+      });
+      
+      // Convert map to array and sort by points (descending)
+      const aggregatedUsers = Array.from(userMap.values())
+        .sort((a, b) => b.points - a.points)
+        .map((user, index) => ({
+          ...user,
+          rank: index + 1,
+          badge: getBadge(user.points)
+        }));
+      
+      setUsers(aggregatedUsers);
     } catch (error) {
       console.error('Error fetching rankings:', error);
-      // Fallback to empty array
       setUsers([]);
     }
     setLoading(false);
@@ -38,7 +85,7 @@ export default function Leaderboard() {
     if (points >= 300) return { level: 'Gold', color: 'from-yellow-300 to-yellow-600', icon: '🥇' };
     if (points >= 200) return { level: 'Silver', color: 'from-gray-200 to-gray-400', icon: '🥈' };
     if (points >= 100) return { level: 'Bronze', color: 'from-orange-300 to-orange-600', icon: '🥉' };
-    return { level: 'Citizen', color: 'from-blue-300 to-blue-600', icon: '⭐' };
+    return { level: 'Citizen', color: 'from-green-300 to-green-600', icon: '⭐' };
   }
 
   function getReward(points) {
@@ -51,7 +98,7 @@ export default function Leaderboard() {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-20 pb-12 px-4"
+      className={`min-h-screen ${colors.background} pt-4 pb-12 px-4`}
     >
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -59,18 +106,18 @@ export default function Leaderboard() {
         className="max-w-6xl mx-auto"
       >
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <motion.div
             animate={{ y: [0, -5, 0] }}
             transition={{ duration: 2, repeat: Infinity }}
-            className="inline-block mb-4"
+            className="inline-block mb-3"
           >
-            <Trophy size={48} className="text-yellow-500" />
+            <Trophy size={40} className="text-yellow-500" />
           </motion.div>
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-3">
-            Leaderboard
+          <h1 className={`text-3xl md:text-4xl font-bold ${colors.text} mb-2`}>
+            {t('topContributors')}
           </h1>
-          <p className="text-gray-600 text-lg">Top Contributors to Our Community</p>
+          <p className={colors.textSecondary}>Community Rankings</p>
         </div>
 
         {/* Top 3 Podium */}
@@ -78,150 +125,139 @@ export default function Leaderboard() {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12"
+            className="grid grid-cols-3 gap-3 mb-8"
           >
             {/* 2nd Place */}
             <motion.div
               whileHover={{ scale: 1.05 }}
-              className="order-first md:order-1 flex flex-col items-center"
+              className="flex flex-col items-center pt-4"
             >
-              <motion.div
-                animate={{ y: [0, 10, 0] }}
-                transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
-                className="w-full"
-              >
-                <div className="bg-gradient-to-br from-gray-200 to-gray-400 rounded-2xl p-8 text-center shadow-xl">
-                  <div className="text-6xl mb-2">🥈</div>
-                  <p className="text-sm text-gray-600 font-semibold mb-2">2nd Place</p>
-                  <h3 className="text-xl font-bold text-gray-900 mb-1">{users[1]?.email?.split('@')[0] || 'User'}</h3>
-                  <p className="text-3xl font-bold text-gray-900">{users[1]?.points || 0}</p>
-                  <p className="text-sm text-gray-600 mt-2">points</p>
-                </div>
-              </motion.div>
+              <div className="relative mb-2">
+                {users[1]?.photoURL ? (
+                  <img src={getImageUrl(users[1].photoURL)} alt="" className="w-14 h-14 rounded-full object-cover border-4 border-gray-300" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-gray-200 to-gray-400 flex items-center justify-center text-gray-700 text-xl font-bold border-4 border-gray-300">
+                    {users[1]?.displayName?.charAt(0) || '2'}
+                  </div>
+                )}
+                <span className="absolute -bottom-1 -right-1 text-2xl">🥈</span>
+              </div>
+              <p className={`text-sm font-bold ${colors.text} text-center truncate w-full`}>
+                {users[1]?.displayName || 'User'}
+              </p>
+              <p className="text-lg font-bold text-gray-500">{users[1]?.points || 0}</p>
+              <p className={`text-xs ${colors.textSecondary}`}>{t('points')}</p>
             </motion.div>
 
             {/* 1st Place */}
             <motion.div
               whileHover={{ scale: 1.05 }}
-              className="order-second md:order-2"
+              className="flex flex-col items-center"
             >
-              <motion.div
-                animate={{ y: [0, -15, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="w-full"
-              >
-                <div className="bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-2xl p-8 text-center shadow-2xl transform md:scale-105">
-                  <div className="text-8xl mb-2">🥇</div>
-                  <p className="text-sm text-yellow-900 font-semibold mb-2">1st Place</p>
-                  <h3 className="text-2xl font-bold text-yellow-900 mb-1">{users[0]?.email?.split('@')[0] || 'User'}</h3>
-                  <p className="text-4xl font-bold text-yellow-900">{users[0]?.points || 0}</p>
-                  <p className="text-sm text-yellow-800 mt-2">points</p>
-                </div>
-              </motion.div>
+              <div className="relative mb-2">
+                {users[0]?.photoURL ? (
+                  <img src={getImageUrl(users[0].photoURL)} alt="" className="w-18 h-18 rounded-full object-cover border-4 border-yellow-400" style={{ width: '72px', height: '72px' }} />
+                ) : (
+                  <div className="rounded-full bg-gradient-to-br from-yellow-300 to-yellow-600 flex items-center justify-center text-yellow-900 text-2xl font-bold border-4 border-yellow-400" style={{ width: '72px', height: '72px' }}>
+                    {users[0]?.displayName?.charAt(0) || '1'}
+                  </div>
+                )}
+                <span className="absolute -bottom-1 -right-1 text-3xl">🥇</span>
+              </div>
+              <p className={`text-sm font-bold ${colors.text} text-center truncate w-full`}>
+                {users[0]?.displayName || 'User'}
+              </p>
+              <p className="text-xl font-bold text-yellow-600">{users[0]?.points || 0}</p>
+              <p className={`text-xs ${colors.textSecondary}`}>{t('points')}</p>
             </motion.div>
 
             {/* 3rd Place */}
             <motion.div
               whileHover={{ scale: 1.05 }}
-              className="order-third md:order-3 flex flex-col items-center"
+              className="flex flex-col items-center pt-6"
             >
-              <motion.div
-                animate={{ y: [0, 10, 0] }}
-                transition={{ duration: 2, repeat: Infinity, delay: 1 }}
-                className="w-full"
-              >
-                <div className="bg-gradient-to-br from-orange-200 to-orange-500 rounded-2xl p-8 text-center shadow-xl">
-                  <div className="text-6xl mb-2">🥉</div>
-                  <p className="text-sm text-orange-900 font-semibold mb-2">3rd Place</p>
-                  <h3 className="text-xl font-bold text-orange-900 mb-1">{users[2]?.email?.split('@')[0] || 'User'}</h3>
-                  <p className="text-3xl font-bold text-orange-900">{users[2]?.points || 0}</p>
-                  <p className="text-sm text-orange-700 mt-2">points</p>
-                </div>
-              </motion.div>
+              <div className="relative mb-2">
+                {users[2]?.photoURL ? (
+                  <img src={getImageUrl(users[2].photoURL)} alt="" className="w-12 h-12 rounded-full object-cover border-4 border-orange-300" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-200 to-orange-500 flex items-center justify-center text-orange-900 text-lg font-bold border-4 border-orange-300">
+                    {users[2]?.displayName?.charAt(0) || '3'}
+                  </div>
+                )}
+                <span className="absolute -bottom-1 -right-1 text-xl">🥉</span>
+              </div>
+              <p className={`text-sm font-bold ${colors.text} text-center truncate w-full`}>
+                {users[2]?.displayName || 'User'}
+              </p>
+              <p className="text-lg font-bold text-orange-600">{users[2]?.points || 0}</p>
+              <p className={`text-xs ${colors.textSecondary}`}>{t('points')}</p>
             </motion.div>
           </motion.div>
         )}
 
-        {/* Full Rankings Table */}
+        {/* Full Rankings List */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl shadow-2xl overflow-hidden"
+          className={`${colors.surface} rounded-2xl shadow-lg overflow-hidden ${colors.border} border`}
         >
-          <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 px-8 py-6">
-            <h2 className="text-2xl font-bold text-white">Community Rankings</h2>
+          <div className="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">{t('leaderboard')}</h2>
           </div>
 
           {loading ? (
             <div className="p-8 text-center">
-              <p className="text-gray-600">Loading rankings...</p>
+              <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+              <p className={colors.textSecondary}>{t('loading')}</p>
             </div>
           ) : users.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-gray-600">No users yet. Be the first to submit a report!</p>
+              <p className={colors.textSecondary}>No users yet. Be the first to submit a report!</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100 border-b-2 border-gray-200">
-                  <tr>
-                    <th className="px-6 py-4 text-left font-bold text-gray-700">Rank</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-700">User</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-700">Points</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-700">Badge</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-700">Rewards</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-700">Reports</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {users.map((user, index) => (
-                    <motion.tr
-                      key={user.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      whileHover={{ backgroundColor: '#f5f5f5' }}
-                      className="transition-colors hover:bg-gray-50"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl">
-                            {user.rank === 1 ? '🥇' : user.rank === 2 ? '🥈' : user.rank === 3 ? '🥉' : '⭐'}
-                          </span>
-                          <span className="font-bold text-lg text-gray-900">#{user.rank}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="font-semibold text-gray-900">{user.email?.split('@')[0]}</p>
-                          <p className="text-sm text-gray-500">{user.email}</p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <TrendingUp size={20} className="text-blue-600" />
-                          <span className="font-bold text-2xl text-blue-600">{user.points}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <motion.div
-                          whileHover={{ scale: 1.1 }}
-                          className={`inline-block px-4 py-2 rounded-full font-bold text-white bg-gradient-to-r ${user.badge.color}`}
-                        >
-                          {user.badge.icon} {user.badge.level}
-                        </motion.div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-lg">{getReward(user.points)}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="font-bold text-gray-900">{user.reportsSubmitted || 0}</span>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {users.map((user, index) => (
+                <motion.div
+                  key={user.id || user.email}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                  className={`flex items-center gap-4 p-4 ${colors.hover} transition-colors`}
+                >
+                  {/* Rank */}
+                  <div className="w-8 text-center">
+                    {user.rank <= 3 ? (
+                      <span className="text-2xl">
+                        {user.rank === 1 ? '🥇' : user.rank === 2 ? '🥈' : '🥉'}
+                      </span>
+                    ) : (
+                      <span className={`font-bold ${colors.textSecondary}`}>#{user.rank}</span>
+                    )}
+                  </div>
+
+                  {/* Avatar */}
+                  {user.photoURL ? (
+                    <img src={getImageUrl(user.photoURL)} alt="" className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${user.badge.color} flex items-center justify-center text-white font-bold`}>
+                      {user.displayName?.charAt(0) || '?'}
+                    </div>
+                  )}
+
+                  {/* Name & Email */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-semibold ${colors.text} truncate`}>{user.displayName}</p>
+                    <p className={`text-xs ${colors.textSecondary} truncate`}>{user.email}</p>
+                  </div>
+
+                  {/* Points */}
+                  <div className="text-right">
+                    <p className="font-bold text-green-500 text-lg">{user.points}</p>
+                    <p className={`text-xs ${colors.textSecondary}`}>{t('points')}</p>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           )}
         </motion.div>
@@ -231,38 +267,38 @@ export default function Leaderboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6"
+          className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4"
         >
-          <div className="bg-blue-50 border-l-4 border-blue-600 rounded-lg p-6">
-            <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2">
-              <Star size={24} /> How to Earn Points
+          <div className={`${colors.surface} border-l-4 border-green-500 rounded-lg p-4 ${colors.border} border shadow`}>
+            <h3 className={`font-bold ${colors.text} mb-2 flex items-center gap-2`}>
+              <Star size={20} className="text-green-500" /> {t('points')}
             </h3>
-            <ul className="text-blue-800 space-y-2 text-sm">
+            <ul className={`${colors.textSecondary} space-y-1 text-sm`}>
               <li>✓ Submit a problem: 3 points</li>
-              <li>✓ Problem solved: +2 bonus points</li>
+              <li>✓ Problem solved: +2 bonus</li>
               <li>✓ Daily activity: +1 point</li>
             </ul>
           </div>
 
-          <div className="bg-purple-50 border-l-4 border-purple-600 rounded-lg p-6">
-            <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
-              <Award size={24} /> Reward Tiers
+          <div className={`${colors.surface} border-l-4 border-yellow-500 rounded-lg p-4 ${colors.border} border shadow`}>
+            <h3 className={`font-bold ${colors.text} mb-2 flex items-center gap-2`}>
+              <Award size={20} className="text-yellow-500" /> Badges
             </h3>
-            <ul className="text-purple-800 space-y-2 text-sm">
-              <li>🥉 100 points: Basic Badge</li>
-              <li>🥈 200 points: Premium Badge</li>
-              <li>🏆 500 points: Platinum Badge</li>
+            <ul className={`${colors.textSecondary} space-y-1 text-sm`}>
+              <li>🥉 100 points: Bronze</li>
+              <li>🥈 200 points: Silver</li>
+              <li>🏆 500 points: Platinum</li>
             </ul>
           </div>
 
-          <div className="bg-pink-50 border-l-4 border-pink-600 rounded-lg p-6">
-            <h3 className="font-bold text-pink-900 mb-3 flex items-center gap-2">
-              <Medal size={24} /> Exclusive Benefits
+          <div className={`${colors.surface} border-l-4 border-purple-500 rounded-lg p-4 ${colors.border} border shadow`}>
+            <h3 className={`font-bold ${colors.text} mb-2 flex items-center gap-2`}>
+              <Medal size={20} className="text-purple-500" /> Benefits
             </h3>
-            <ul className="text-pink-800 space-y-2 text-sm">
+            <ul className={`${colors.textSecondary} space-y-1 text-sm`}>
               <li>🎁 Discount vouchers</li>
-              <li>🎯 Featured profile badge</li>
-              <li>✨ Early access to events</li>
+              <li>🎯 Featured badge</li>
+              <li>✨ Early access</li>
             </ul>
           </div>
         </motion.div>

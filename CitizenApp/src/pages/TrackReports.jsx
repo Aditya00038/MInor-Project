@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { collection, query, where, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { MapPin, Calendar, CheckCircle, AlertCircle, Clock, Zap } from 'lucide-react';
@@ -7,6 +8,7 @@ import { motion } from 'framer-motion';
 
 export default function TrackReports() {
   const { currentUser } = useAuth();
+  const { darkMode, colors } = useTheme();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
@@ -83,9 +85,10 @@ export default function TrackReports() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-20 pb-12 px-4">
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'} pt-20 pb-12 px-4`}>
         <div className="max-w-4xl mx-auto text-center py-12">
-          <p className="text-gray-600 text-lg">Loading your reports...</p>
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className={`${colors.textSecondary} text-lg`}>Loading your reports...</p>
         </div>
       </div>
     );
@@ -95,7 +98,7 @@ export default function TrackReports() {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-20 pb-12 px-4"
+      className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'} pt-20 pb-12 px-4`}
     >
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -107,7 +110,7 @@ export default function TrackReports() {
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-3">
             Track Your Reports
           </h1>
-          <p className="text-gray-600 text-lg">Monitor the status of your reported civic issues</p>
+          <p className={`${colors.textSecondary} text-lg`}>Monitor the status of your reported civic issues</p>
         </div>
 
         {/* Filter Buttons */}
@@ -123,7 +126,7 @@ export default function TrackReports() {
             className={`px-6 py-3 rounded-xl font-semibold transition-all ${
               filter === 'all'
                 ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-600'
+                : `${colors.surface} ${colors.text} border-2 ${darkMode ? 'border-gray-700 hover:border-blue-500' : 'border-gray-200 hover:border-blue-600'}`
             }`}
           >
             All ({reports.length})
@@ -141,7 +144,7 @@ export default function TrackReports() {
                 className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
                   filter === status
                     ? `bg-gradient-to-r ${info.color} text-white shadow-lg`
-                    : `${info.bgColor} text-gray-700 border-2 ${info.borderColor}`
+                    : `${darkMode ? 'bg-gray-800' : info.bgColor} ${colors.text} border-2 ${darkMode ? 'border-gray-700' : info.borderColor}`
                 }`}
               >
                 <info.icon size={18} />
@@ -156,11 +159,11 @@ export default function TrackReports() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl shadow-xl p-12 text-center"
+            className={`${colors.surface} rounded-2xl shadow-xl p-12 text-center ${colors.border} border`}
           >
-            <AlertCircle size={48} className="mx-auto text-gray-400 mb-4" />
-            <p className="text-gray-600 text-lg mb-4">No reports found with this filter</p>
-            <p className="text-gray-500">Start by reporting an issue to track its progress!</p>
+            <AlertCircle size={48} className={`mx-auto ${colors.textSecondary} mb-4`} />
+            <p className={`${colors.text} text-lg mb-4`}>No reports found with this filter</p>
+            <p className={colors.textSecondary}>Start by reporting an issue to track its progress!</p>
           </motion.div>
         ) : (
           <motion.div
@@ -180,15 +183,15 @@ export default function TrackReports() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                   whileHover={{ scale: 1.02 }}
-                  className={`bg-white rounded-2xl shadow-lg overflow-hidden border-l-4 ${statusInfo.borderColor}`}
+                  className={`${colors.surface} rounded-2xl shadow-lg overflow-hidden border-l-4 ${statusInfo.borderColor} ${colors.border} border-r border-t border-b`}
                 >
                   {/* Card Content */}
                   <div className="p-6 space-y-4">
                     {/* Header */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                       <div className="flex-1">
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">{report.category}</h3>
-                        <p className="text-gray-600">{report.description}</p>
+                        <h3 className={`text-2xl font-bold ${colors.text} mb-2`}>{report.category}</h3>
+                        <p className={colors.textSecondary}>{report.description}</p>
                       </div>
                       <motion.div
                         whileHover={{ scale: 1.1 }}
@@ -202,10 +205,10 @@ export default function TrackReports() {
                     {/* Status Progress Bar */}
                     <div className="space-y-2">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-semibold text-gray-700">Progress</span>
-                        <span className="text-sm font-bold text-gray-900">{Math.round(progress)}%</span>
+                        <span className={`text-sm font-semibold ${colors.text}`}>Progress</span>
+                        <span className={`text-sm font-bold ${colors.text}`}>{Math.round(progress)}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div className={`w-full ${darkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded-full h-3 overflow-hidden`}>
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${progress}%` }}
@@ -216,28 +219,28 @@ export default function TrackReports() {
                     </div>
 
                     {/* Info Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-t border-b border-gray-200">
+                    <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-t border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wider">Location</p>
-                        <p className="font-semibold text-gray-900 flex items-center gap-1 mt-1">
+                        <p className={`text-xs ${colors.textSecondary} uppercase tracking-wider`}>Location</p>
+                        <p className={`font-semibold ${colors.text} flex items-center gap-1 mt-1`}>
                           <MapPin size={16} /> {report.location}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wider">Reported</p>
-                        <p className="font-semibold text-gray-900 flex items-center gap-1 mt-1">
+                        <p className={`text-xs ${colors.textSecondary} uppercase tracking-wider`}>Reported</p>
+                        <p className={`font-semibold ${colors.text} flex items-center gap-1 mt-1`}>
                           <Calendar size={16} />
                           {report.createdAt?.toLocaleDateString?.() || 'N/A'}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wider">Last Updated</p>
-                        <p className="font-semibold text-gray-900 mt-1">
+                        <p className={`text-xs ${colors.textSecondary} uppercase tracking-wider`}>Last Updated</p>
+                        <p className={`font-semibold ${colors.text} mt-1`}>
                           {report.updatedAt?.toLocaleDateString?.() || 'N/A'}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wider">Points</p>
+                        <p className={`text-xs ${colors.textSecondary} uppercase tracking-wider`}>Points</p>
                         <p className="font-bold text-lg text-blue-600 mt-1">+{report.points || 3} pts</p>
                       </div>
                     </div>
@@ -245,9 +248,9 @@ export default function TrackReports() {
                     {/* Reward Status */}
                     <motion.div
                       whileHover={{ scale: 1.01 }}
-                      className={`${statusInfo.bgColor} border-2 ${statusInfo.borderColor} rounded-xl p-4`}
+                      className={`${darkMode ? 'bg-gray-800' : statusInfo.bgColor} border-2 ${darkMode ? 'border-gray-700' : statusInfo.borderColor} rounded-xl p-4`}
                     >
-                      <p className={`font-semibold ${statusInfo.textColor}`}>
+                      <p className={`font-semibold ${darkMode ? colors.text : statusInfo.textColor}`}>
                         {getRewardStatus(report.status)}
                       </p>
                     </motion.div>
@@ -284,28 +287,28 @@ export default function TrackReports() {
           transition={{ delay: 0.3 }}
           className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6"
         >
-          <div className="bg-blue-50 border-l-4 border-blue-300 rounded-lg p-6">
+          <div className={`${darkMode ? 'bg-blue-900/30 border-blue-500' : 'bg-blue-50 border-blue-300'} border-l-4 rounded-lg p-6`}>
             <div className="flex items-center gap-3 mb-3">
               <AlertCircle size={24} className="text-blue-600" />
-              <h3 className="font-bold text-blue-900">Submitted</h3>
+              <h3 className={`font-bold ${darkMode ? 'text-blue-300' : 'text-blue-900'}`}>Submitted</h3>
             </div>
-            <p className="text-blue-800 text-sm">Report received. Workers will be notified.</p>
+            <p className={`${darkMode ? 'text-blue-200' : 'text-blue-800'} text-sm`}>Report received. Workers will be notified.</p>
           </div>
 
-          <div className="bg-purple-50 border-l-4 border-purple-300 rounded-lg p-6">
+          <div className={`${darkMode ? 'bg-purple-900/30 border-purple-500' : 'bg-purple-50 border-purple-300'} border-l-4 rounded-lg p-6`}>
             <div className="flex items-center gap-3 mb-3">
               <Zap size={24} className="text-purple-600" />
-              <h3 className="font-bold text-purple-900">In Progress</h3>
+              <h3 className={`font-bold ${darkMode ? 'text-purple-300' : 'text-purple-900'}`}>In Progress</h3>
             </div>
-            <p className="text-purple-800 text-sm">A worker is actively working on this issue.</p>
+            <p className={`${darkMode ? 'text-purple-200' : 'text-purple-800'} text-sm`}>A worker is actively working on this issue.</p>
           </div>
 
-          <div className="bg-green-50 border-l-4 border-green-300 rounded-lg p-6">
+          <div className={`${darkMode ? 'bg-green-900/30 border-green-500' : 'bg-green-50 border-green-300'} border-l-4 rounded-lg p-6`}>
             <div className="flex items-center gap-3 mb-3">
               <CheckCircle size={24} className="text-green-600" />
-              <h3 className="font-bold text-green-900">Completed</h3>
+              <h3 className={`font-bold ${darkMode ? 'text-green-300' : 'text-green-900'}`}>Completed</h3>
             </div>
-            <p className="text-green-800 text-sm">Issue resolved! You earned bonus points.</p>
+            <p className={`${darkMode ? 'text-green-200' : 'text-green-800'} text-sm`}>Issue resolved! You earned bonus points.</p>
           </div>
         </motion.div>
 

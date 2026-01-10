@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { MapPin, Camera, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -8,6 +9,7 @@ import { motion } from 'framer-motion';
 
 export default function ReportProblem() {
   const { currentUser } = useAuth();
+  const { darkMode, colors } = useTheme();
   const cameraRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -15,7 +17,7 @@ export default function ReportProblem() {
   const [formData, setFormData] = useState({
     category: '',
     description: '',
-    location: '',
+    location_text: '', // TEXT format: "City, State, Country"
     latitude: null,
     longitude: null
   });
@@ -26,6 +28,7 @@ export default function ReportProblem() {
   const [cameraActive, setCameraActive] = useState(false);
   const [mediaType, setMediaType] = useState(null); // 'photo', 'video'
   const [locationStatus, setLocationStatus] = useState(null);
+  const [locationAddress, setLocationAddress] = useState(''); // Store readable address
 
   const categories = [
     'Garbage on Open Spaces',
@@ -61,13 +64,17 @@ export default function ReportProblem() {
               `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
             );
             const data = await response.json();
-            const location = data.address?.city 
-              ? `${data.address.city}, ${data.address.country}`
-              : `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
             
+            // Format: "City, State, Country"
+            const city = data.address?.city || data.address?.town || '';
+            const state = data.address?.state || '';
+            const country = data.address?.country || '';
+            const location_text = [city, state, country].filter(Boolean).join(', ');
+            
+            setLocationAddress(location_text || `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`);
             setFormData(prev => ({ 
               ...prev, 
-              location,
+              location_text: location_text || `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`,
               latitude,
               longitude 
             }));
@@ -75,9 +82,11 @@ export default function ReportProblem() {
             setTimeout(() => setLocationStatus(null), 3000);
           } catch (error) {
             console.error('Geocoding error:', error);
+            const location_text = `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`;
+            setLocationAddress(location_text);
             setFormData(prev => ({ 
               ...prev, 
-              location: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+              location_text,
               latitude,
               longitude 
             }));
@@ -142,7 +151,7 @@ export default function ReportProblem() {
   async function handleSubmit(e) {
     e.preventDefault();
     
-    if (!formData.category || !formData.description || !formData.location) {
+    if (!formData.category || !formData.description || !formData.location_text) {
       alert('Please fill all required fields');
       return;
     }
@@ -151,26 +160,60 @@ export default function ReportProblem() {
 
     try {
       let mediaUrl = '';
+      let uploadStatus = 'Starting upload...';
 
       if (media) {
-        const storageRef = ref(storage, `reports/${Date.now()}_${mediaType}`);
-        await uploadBytes(storageRef, media);
-        mediaUrl = await getDownloadURL(storageRef);
+        try {
+          // Upload to backend instead of Firebase Storage (avoids CORS issues)
+          const formDataUpload = new FormData();
+          formDataUpload.append('file', media);
+          
+          const uploadResponse = await fetch('http://localhost:8000/api/uploads/upload', {
+            method: 'POST',
+            body: formDataUpload
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+          }
+
+          const uploadedFile = await uploadResponse.json();
+          mediaUrl = `http://localhost:8000${uploadedFile.url}`;
+          console.log('✓ File uploaded successfully:', mediaUrl);
+        } catch (uploadError) {
+          console.warn('Backend upload failed, trying Firebase Storage...', uploadError);
+          // Fallback: Try Firebase Storage if backend upload fails
+          try {
+            const storageRef = ref(storage, `reports/${Date.now()}_${mediaType}`);
+            await uploadBytes(storageRef, media);
+            mediaUrl = await getDownloadURL(storageRef);
+            console.log('✓ Firebase upload succeeded:', mediaUrl);
+          } catch (firebaseError) {
+            console.warn('Firebase Storage also failed, proceeding without media', firebaseError);
+            // Continue without media if both uploads fail
+          }
+        }
       }
 
-      // Add report
+      // Add report - NOW WITH TEXT LOCATION
       const reportRef = await addDoc(collection(db, 'reports'), {
-        ...formData,
+        category: formData.category,
+        description: formData.description,
+        location_text: formData.location_text, // Store text address
+        latitude: formData.latitude,
+        longitude: formData.longitude,
         mediaUrl,
         mediaType,
         userId: currentUser.uid,
         userEmail: currentUser.email,
         userName: currentUser.displayName || 'Anonymous',
         status: 'submitted',
-        points: 0,
+        points: 3,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+
+      console.log('✓ Report submitted:', reportRef.id);
 
       // Add points to user profile (3 points for submitting)
       const userRef = doc(db, 'users', currentUser.uid);
@@ -189,13 +232,14 @@ export default function ReportProblem() {
       });
 
       setSuccess(true);
-      setFormData({ category: '', description: '', location: '', latitude: null, longitude: null });
+      setFormData({ category: '', description: '', location_text: '', latitude: null, longitude: null });
       removeMedia();
+      setLocationAddress('');
 
       setTimeout(() => setSuccess(false), 3000);
     } catch (error) {
       console.error('Error submitting report:', error);
-      alert('Failed to submit report. Please try again.');
+      alert('Failed to submit report. Please try again. Error: ' + error.message);
     }
     setLoading(false);
   }
@@ -224,7 +268,7 @@ export default function ReportProblem() {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-20 pb-12 px-4"
+      className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'} pt-20 pb-12 px-4`}
     >
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -236,7 +280,7 @@ export default function ReportProblem() {
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-3">
             Report a Problem
           </h1>
-          <p className="text-gray-600 text-lg">Help us improve your community by reporting civic issues</p>
+          <p className={`${colors.textSecondary} text-lg`}>Help us improve your community by reporting civic issues</p>
         </div>
 
         {/* Success Message */}
@@ -258,12 +302,12 @@ export default function ReportProblem() {
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-2xl shadow-xl p-8 space-y-6"
+          className={`${colors.surface} rounded-2xl shadow-xl p-8 space-y-6 ${colors.border} border`}
         >
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Category */}
             <motion.div whileHover={{ scale: 1.01 }} className="group">
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
+              <label className={`block text-lg font-semibold ${colors.text} mb-3`}>
                 Problem Category *
               </label>
               <select
@@ -271,7 +315,7 @@ export default function ReportProblem() {
                 value={formData.category}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none transition-colors text-base"
+                className={`w-full px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none transition-colors text-base`}
               >
                 <option value="">Select a category</option>
                 {categories.map((cat, index) => (
@@ -282,7 +326,7 @@ export default function ReportProblem() {
 
             {/* Description */}
             <motion.div whileHover={{ scale: 1.01 }} className="group">
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
+              <label className={`block text-lg font-semibold ${colors.text} mb-3`}>
                 Description *
               </label>
               <textarea
@@ -292,24 +336,24 @@ export default function ReportProblem() {
                 placeholder="Describe the problem in detail... (min 10 characters)"
                 rows="5"
                 required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none transition-colors text-base resize-none"
+                className={`w-full px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white placeholder-gray-400' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none transition-colors text-base resize-none`}
               />
             </motion.div>
 
             {/* Location Section */}
             <motion.div className="group">
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
+              <label className={`block text-lg font-semibold ${colors.text} mb-3`}>
                 Location *
               </label>
               <div className="flex gap-3 mb-3">
                 <input
                   type="text"
-                  name="location"
-                  value={formData.location}
+                  name="location_text"
+                  value={formData.location_text}
                   onChange={handleChange}
-                  placeholder="Enter location or use GPS..."
+                  placeholder="City, State, Country (or use GPS...)"
                   required
-                  className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none transition-colors"
+                  className={`flex-1 px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white placeholder-gray-400' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none transition-colors`}
                 />
                 <motion.button
                   whileHover={{ scale: 1.05 }}
@@ -329,17 +373,20 @@ export default function ReportProblem() {
               )}
               {locationStatus === 'success' && (
                 <p className="text-green-600 text-sm flex items-center gap-2">
-                  ✓ Location acquired
+                  ✓ Location: {locationAddress}
                 </p>
               )}
               {locationStatus === 'error' && (
                 <p className="text-red-600 text-sm">Please enter location manually</p>
               )}
+              {formData.location_text && (
+                <p className={`${colors.textSecondary} text-xs mt-2`}>📍 {formData.location_text}</p>
+              )}
             </motion.div>
 
             {/* Camera Section */}
             <motion.div className="group">
-              <label className="block text-lg font-semibold text-gray-700 mb-3">
+              <label className={`block text-lg font-semibold ${colors.text} mb-3`}>
                 Capture Photo/Video (Optional)
               </label>
               
@@ -443,10 +490,10 @@ export default function ReportProblem() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="mt-8 bg-blue-50 border-l-4 border-blue-600 rounded-lg p-6"
+          className={`mt-8 ${darkMode ? 'bg-blue-900/30 border-blue-500' : 'bg-blue-50 border-blue-600'} border-l-4 rounded-lg p-6`}
         >
-          <h3 className="font-bold text-blue-900 mb-2">💡 How it works:</h3>
-          <ul className="text-blue-800 space-y-1 text-sm">
+          <h3 className={`font-bold ${darkMode ? 'text-blue-300' : 'text-blue-900'} mb-2`}>💡 How it works:</h3>
+          <ul className={`${darkMode ? 'text-blue-200' : 'text-blue-800'} space-y-1 text-sm`}>
             <li>✓ Submit a problem and earn 3 points</li>
             <li>✓ Workers get notified and work on it</li>
             <li>✓ Track problem status (Submitted → In Progress → Done)</li>

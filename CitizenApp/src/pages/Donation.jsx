@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { Heart, ShoppingCart, Plus, X, MapPin, User, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+const BACKEND_URL = 'http://localhost:8000';
+
 export default function Donation() {
   const { currentUser } = useAuth();
+  const { darkMode, colors } = useTheme();
   const [items, setItems] = useState([]);
   const [userItems, setUserItems] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -80,9 +84,36 @@ export default function Donation() {
       let imageUrl = '';
       
       if (formData.image) {
-        const storageRef = ref(storage, `donations/${Date.now()}_${formData.image.name}`);
-        await uploadBytes(storageRef, formData.image);
-        imageUrl = await getDownloadURL(storageRef);
+        try {
+          // Try backend upload first (avoids CORS issues)
+          const formDataUpload = new FormData();
+          formDataUpload.append('file', formData.image);
+          
+          const uploadResponse = await fetch('http://localhost:8000/api/uploads/upload', {
+            method: 'POST',
+            body: formDataUpload
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+          }
+
+          const uploadedFile = await uploadResponse.json();
+          imageUrl = `http://localhost:8000${uploadedFile.url}`;
+          console.log('✓ Image uploaded successfully:', imageUrl);
+        } catch (uploadError) {
+          console.warn('Backend upload failed, trying Firebase Storage...', uploadError);
+          // Fallback: Try Firebase Storage if backend upload fails
+          try {
+            const storageRef = ref(storage, `donations/${Date.now()}_${formData.image.name}`);
+            await uploadBytes(storageRef, formData.image);
+            imageUrl = await getDownloadURL(storageRef);
+            console.log('✓ Firebase upload succeeded:', imageUrl);
+          } catch (firebaseError) {
+            console.warn('Firebase Storage also failed, proceeding without image', firebaseError);
+            // Continue without image if both uploads fail
+          }
+        }
       }
 
       await addDoc(collection(db, 'donations'), {
@@ -107,7 +138,7 @@ export default function Donation() {
       fetchItems();
     } catch (error) {
       console.error('Error adding item:', error);
-      alert('Failed to add item');
+      alert('Failed to add item: ' + error.message);
     }
     setLoading(false);
   }
@@ -131,7 +162,7 @@ export default function Donation() {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-20 pb-12 px-4"
+      className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'} pt-20 pb-12 px-4`}
     >
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -144,7 +175,7 @@ export default function Donation() {
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
               Community Donations
             </h1>
-            <p className="text-gray-600 text-lg">Give and Get - Share items with your community</p>
+            <p className={`${colors.textSecondary} text-lg`}>Give and Get - Share items with your community</p>
           </div>
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -162,13 +193,13 @@ export default function Donation() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl shadow-xl p-8 mb-8"
+            className={`${colors.surface} rounded-2xl shadow-xl p-8 mb-8 ${colors.border} border`}
           >
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Add Item to Donate</h2>
+              <h2 className={`text-2xl font-bold ${colors.text}`}>Add Item to Donate</h2>
               <button
                 onClick={() => setShowForm(false)}
-                className="text-gray-500 hover:text-gray-700"
+                className={`${colors.textSecondary} hover:${colors.text}`}
               >
                 <X size={28} />
               </button>
@@ -177,7 +208,7 @@ export default function Donation() {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-lg font-semibold text-gray-700 mb-2">
+                  <label className={`block text-lg font-semibold ${colors.text} mb-2`}>
                     Item Title *
                   </label>
                   <input
@@ -187,12 +218,12 @@ export default function Donation() {
                     onChange={handleFormChange}
                     placeholder="e.g., Vintage Wooden Chair"
                     required
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none"
+                    className={`w-full px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-lg font-semibold text-gray-700 mb-2">
+                  <label className={`block text-lg font-semibold ${colors.text} mb-2`}>
                     Category *
                   </label>
                   <select
@@ -200,7 +231,7 @@ export default function Donation() {
                     value={formData.category}
                     onChange={handleFormChange}
                     required
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none"
+                    className={`w-full px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none`}
                   >
                     <option value="">Select category</option>
                     {categories.map(cat => (
@@ -211,7 +242,7 @@ export default function Donation() {
               </div>
 
               <div>
-                <label className="block text-lg font-semibold text-gray-700 mb-2">
+                <label className={`block text-lg font-semibold ${colors.text} mb-2`}>
                   Description *
                 </label>
                 <textarea
@@ -221,12 +252,12 @@ export default function Donation() {
                   placeholder="Describe the item, its condition, and why you're donating it..."
                   rows="4"
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none resize-none"
+                  className={`w-full px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none resize-none`}
                 />
               </div>
 
               <div>
-                <label className="block text-lg font-semibold text-gray-700 mb-2">
+                <label className={`block text-lg font-semibold ${colors.text} mb-2`}>
                   Item Condition *
                 </label>
                 <select
@@ -234,7 +265,7 @@ export default function Donation() {
                   value={formData.condition}
                   onChange={handleFormChange}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none"
+                  className={`w-full px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none`}
                 >
                   <option value="like-new">Like New</option>
                   <option value="good">Good</option>
@@ -244,14 +275,14 @@ export default function Donation() {
               </div>
 
               <div>
-                <label className="block text-lg font-semibold text-gray-700 mb-2">
+                <label className={`block text-lg font-semibold ${colors.text} mb-2`}>
                   Upload Image
                 </label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleImageChange}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl"
+                  className={`w-full px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-200 bg-white text-gray-900'} rounded-xl`}
                 />
                 {preview && (
                   <img src={preview} alt="Preview" className="mt-4 w-32 h-32 object-cover rounded-lg" />
@@ -283,13 +314,13 @@ export default function Donation() {
             placeholder="Search items..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none"
+            className={`flex-1 px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white placeholder-gray-400' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none`}
           />
           
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-600 focus:outline-none"
+            className={`px-4 py-3 border-2 ${darkMode ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-200 bg-white text-gray-900'} rounded-xl focus:border-blue-600 focus:outline-none`}
           >
             <option value="all">All Categories</option>
             {categories.map(cat => (
@@ -315,8 +346,8 @@ export default function Donation() {
             animate={{ opacity: 1 }}
             className="text-center py-12"
           >
-            <Heart size={48} className="mx-auto text-gray-400 mb-4" />
-            <p className="text-gray-600 text-lg">No items available right now</p>
+            <Heart size={48} className={`mx-auto ${colors.textSecondary} mb-4`} />
+            <p className={`${colors.textSecondary} text-lg`}>No items available right now</p>
           </motion.div>
         ) : (
           <motion.div
@@ -331,7 +362,7 @@ export default function Donation() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
                 whileHover={{ y: -5 }}
-                className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all"
+                className={`${colors.surface} rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all ${colors.border} border`}
               >
                 {/* Image */}
                 <div className="relative h-48 bg-gradient-to-br from-blue-200 to-purple-200 overflow-hidden">
@@ -349,16 +380,16 @@ export default function Donation() {
                 <div className="p-6 space-y-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-semibold text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
+                      <span className={`text-xs font-semibold ${darkMode ? 'text-purple-400 bg-purple-900/50' : 'text-purple-600 bg-purple-100'} px-2 py-1 rounded-full`}>
                         {item.category}
                       </span>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">{item.title}</h3>
-                    <p className="text-gray-600 text-sm line-clamp-2">{item.description}</p>
+                    <h3 className={`text-xl font-bold ${colors.text} mb-2`}>{item.title}</h3>
+                    <p className={`${colors.textSecondary} text-sm line-clamp-2`}>{item.description}</p>
                   </div>
 
                   {/* User Info */}
-                  <div className="flex items-center gap-3 text-sm text-gray-600 border-t pt-3">
+                  <div className={`flex items-center gap-3 text-sm ${colors.textSecondary} border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} pt-3`}>
                     <User size={16} />
                     <span className="font-semibold">{item.userName}</span>
                   </div>
@@ -386,9 +417,9 @@ export default function Donation() {
           transition={{ delay: 0.3 }}
           className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6"
         >
-          <div className="bg-blue-50 border-l-4 border-blue-600 rounded-lg p-6">
-            <h3 className="font-bold text-blue-900 mb-3">♻️ How It Works</h3>
-            <ul className="text-blue-800 space-y-2 text-sm">
+          <div className={`${darkMode ? 'bg-blue-900/30 border-blue-500' : 'bg-blue-50 border-blue-600'} border-l-4 rounded-lg p-6`}>
+            <h3 className={`font-bold ${darkMode ? 'text-blue-300' : 'text-blue-900'} mb-3`}>♻️ How It Works</h3>
+            <ul className={`${darkMode ? 'text-blue-200' : 'text-blue-800'} space-y-2 text-sm`}>
               <li>✓ List your items</li>
               <li>✓ Browse community items</li>
               <li>✓ Add to wishlist</li>
@@ -396,9 +427,9 @@ export default function Donation() {
             </ul>
           </div>
 
-          <div className="bg-green-50 border-l-4 border-green-600 rounded-lg p-6">
-            <h3 className="font-bold text-green-900 mb-3">🌍 Benefits</h3>
-            <ul className="text-green-800 space-y-2 text-sm">
+          <div className={`${darkMode ? 'bg-green-900/30 border-green-500' : 'bg-green-50 border-green-600'} border-l-4 rounded-lg p-6`}>
+            <h3 className={`font-bold ${darkMode ? 'text-green-300' : 'text-green-900'} mb-3`}>🌍 Benefits</h3>
+            <ul className={`${darkMode ? 'text-green-200' : 'text-green-800'} space-y-2 text-sm`}>
               <li>✓ Reduce waste</li>
               <li>✓ Help community</li>
               <li>✓ Save money</li>
@@ -406,9 +437,9 @@ export default function Donation() {
             </ul>
           </div>
 
-          <div className="bg-purple-50 border-l-4 border-purple-600 rounded-lg p-6">
-            <h3 className="font-bold text-purple-900 mb-3">💡 Tips</h3>
-            <ul className="text-purple-800 space-y-2 text-sm">
+          <div className={`${darkMode ? 'bg-purple-900/30 border-purple-500' : 'bg-purple-50 border-purple-600'} border-l-4 rounded-lg p-6`}>
+            <h3 className={`font-bold ${darkMode ? 'text-purple-300' : 'text-purple-900'} mb-3`}>💡 Tips</h3>
+            <ul className={`${darkMode ? 'text-purple-200' : 'text-purple-800'} space-y-2 text-sm`}>
               <li>✓ Add clear photos</li>
               <li>✓ Describe condition</li>
               <li>✓ Be honest & kind</li>
