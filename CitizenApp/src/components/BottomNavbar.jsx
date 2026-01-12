@@ -7,7 +7,8 @@ import {
   FaTrophy, 
   FaPlusCircle, 
   FaMapMarkerAlt, 
-  FaHandHoldingHeart 
+  FaHandHoldingHeart,
+  FaShoppingCart
 } from 'react-icons/fa';
 
 function BottomNavbar() {
@@ -21,6 +22,7 @@ function BottomNavbar() {
     { path: '/report', icon: FaPlusCircle, label: t('report'), isCenter: true },
     { path: '/track', icon: FaMapMarkerAlt, label: t('track') },
     { path: '/donations', icon: FaHandHoldingHeart, label: t('donation') },
+    { path: '/cart', icon: FaShoppingCart, label: t('cart') },
   ];
 
   return (

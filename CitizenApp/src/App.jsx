@@ -14,6 +14,7 @@ import Chatbot from './pages/Chatbot';
 import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
 import Donation from './pages/Donation';
+import Cart from './pages/Cart';
 
 // Layout component for protected routes
 function AppLayout({ children }) {
@@ -81,6 +82,14 @@ function ThemedApp() {
         <ProtectedRoute>
           <AppLayout>
             <Donation />
+          </AppLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/cart" element={
+        <ProtectedRoute>
+          <AppLayout>
+            <Cart />
           </AppLayout>
         </ProtectedRoute>
       } />

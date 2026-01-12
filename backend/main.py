@@ -33,7 +33,7 @@ app.add_middleware(
 )
 
 # Import routes
-from routes import reports, donations, users, auth, uploads
+from routes import reports, donations, users, auth, uploads, chatbot
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
@@ -41,6 +41,7 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(donations.router, prefix="/api/donations", tags=["Donations"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["File Uploads"])
+app.include_router(chatbot.router, prefix="/api/chatbot", tags=["Chatbot"])
 
 # Serve uploaded files as static files
 uploads_dir = Path("uploads")

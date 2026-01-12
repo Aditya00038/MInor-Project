@@ -1,42 +1,24 @@
 import { useState } from 'react';
-import { Send, Bot, User as UserIcon } from 'lucide-react';
+import { Send, Bot, User as UserIcon, Recycle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useTheme } from '../context/ThemeContext';
+
+const BACKEND_URL = 'http://localhost:8000';
 
 export default function Chatbot() {
+  const { darkMode, colors } = useTheme();
+
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      text: 'Hello! I\'m your civic assistant. How can I help you today?',
+      text: "Hi! I'm your eco chatbot. Ask me how to reuse plastic, cardboard, old clothes, or other waste items to create something useful.",
       time: new Date()
     }
   ]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const predefinedResponses = {
-    'how to report': 'To report a problem, go to the "Report Problem" page, select a category, add description, capture your location, upload an image/video, and submit. You\'ll receive status updates!',
-    'track report': 'You can track all your reports on the "Track Reports" page. Filter by status to see Reported, Assigned, In Progress, or Completed issues.',
-    'status': 'Report statuses are:\n• Reported - Issue submitted\n• Assigned - Assigned to a worker\n• In Progress - Worker is resolving it\n• Completed - Issue resolved',
-    'categories': 'We support these categories:\n• Garbage on Open Spaces\n• Road Damage\n• Drainage Issues\n• Street Light Problem\n• Water Leakage\n• Pothole\n• Other',
-    'before after': 'Once a problem is completed, you can view before-and-after images in the report details to see how it was resolved.',
-    'leaderboard': 'The Leaderboard page shows top-performing workers based on completed tasks and citizen ratings. This encourages accountability and recognition.',
-    'workers': 'Field workers receive task assignments and can also self-assign low-priority tasks. They upload before-and-after images as proof of work.',
-    'hi': 'Hello! How can I assist you with civic issues today?',
-    'hello': 'Hi there! I\'m here to help. What would you like to know?',
-    'help': 'I can help you with:\n• How to report problems\n• Track your reports\n• Understanding report statuses\n• Problem categories\n• Before-after verification\n• Leaderboard info\n\nJust ask me anything!'
-  };
-
-  const getBotResponse = (userMessage) => {
-    const lowerMessage = userMessage.toLowerCase();
-    
-    for (const [key, response] of Object.entries(predefinedResponses)) {
-      if (lowerMessage.includes(key)) {
-        return response;
-      }
-    }
-    
-    return 'I\'m here to help! Try asking about:\n• How to report issues\n• Tracking reports\n• Report statuses\n• Problem categories\n• Leaderboard\n\nOr type "help" for more options.';
-  };
-
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMessage = {
@@ -46,16 +28,43 @@ export default function Chatbot() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const query = input;
     setInput('');
+    setLoading(true);
 
-    setTimeout(() => {
-      const botResponse = {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/chatbot/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: query })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to reach chatbot backend');
+      }
+
+      const data = await res.json();
+
+      const botMessage = {
         type: 'bot',
-        text: getBotResponse(input),
+        text: data.reply || 'I found a few ideas, but something went wrong formatting them.',
+        time: new Date(),
+        ideas: data.ideas || []
+      };
+
+      setMessages(prev => [...prev, botMessage]);
+    } catch (err) {
+      const fallback = {
+        type: 'bot',
+        text: 'I could not reach the eco-ideas server. Make sure the backend is running on http://localhost:8000. Meanwhile, try asking about plastic bottle planters, cardboard organizers, or bags from old t-shirts.',
         time: new Date()
       };
-      setMessages(prev => [...prev, botResponse]);
-    }, 500);
+      setMessages(prev => [...prev, fallback]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -66,61 +75,137 @@ export default function Chatbot() {
   };
 
   return (
-    <div className="chatbot-container">
-      <div className="chatbot-header">
-        <Bot size={32} />
-        <div>
-          <h1>Civic Assistant</h1>
-          <p>Ask me anything about reporting civic issues</p>
-        </div>
-      </div>
-
-      <div className="messages-container">
-        {messages.map((message, index) => (
-          <div key={index} className={`message ${message.type}`}>
-            <div className="message-avatar">
-              {message.type === 'bot' ? <Bot size={24} /> : <UserIcon size={24} />}
-            </div>
-            <div className="message-content">
-              <p>{message.text}</p>
-              <span className="message-time">
-                {message.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
+    <div className="px-4 pt-4 pb-24 max-w-lg mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`${colors.surface} rounded-3xl shadow-lg overflow-hidden border ${colors.border}`}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4 flex items-center gap-3 text-white">
+          <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
+            <Recycle size={26} />
           </div>
-        ))}
-      </div>
-
-      <div className="input-container">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Type your question..."
-        />
-        <button onClick={handleSend} disabled={!input.trim()}>
-          <Send size={20} />
-        </button>
-      </div>
-
-      <div className="quick-questions">
-        <p>Quick questions:</p>
-        <div className="question-buttons">
-          <button onClick={() => setInput('How to report a problem?')}>
-            How to report?
-          </button>
-          <button onClick={() => setInput('Track my reports')}>
-            Track reports
-          </button>
-          <button onClick={() => setInput('Report statuses')}>
-            Report status
-          </button>
-          <button onClick={() => setInput('Help')}>
-            Help
-          </button>
+          <div>
+            <h1 className="text-lg font-bold">Eco Chatbot</h1>
+            <p className="text-xs text-white/80">Ask how to reuse plastic, paper, cardboard & old items</p>
+          </div>
         </div>
-      </div>
+
+        {/* Messages */}
+        <div className={`h-96 overflow-y-auto p-4 space-y-3 ${darkMode ? 'bg-gray-900' : 'bg-slate-50'}`}>
+          {messages.map((message, index) => (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div className={`flex items-end gap-2 max-w-[80%] ${message.type === 'user' ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  message.type === 'user'
+                    ? 'bg-green-500 text-white'
+                    : darkMode
+                      ? 'bg-gray-800 text-green-400'
+                      : 'bg-white text-green-600 border border-green-100'
+                }`}>
+                  {message.type === 'bot' ? <Bot size={18} /> : <UserIcon size={18} />}
+                </div>
+                <div>
+                  <div className={`rounded-2xl px-3 py-2 text-sm whitespace-pre-line ${
+                    message.type === 'user'
+                      ? 'bg-green-500 text-white'
+                      : darkMode
+                        ? 'bg-gray-800 text-gray-100'
+                        : 'bg-white text-slate-900 shadow-sm'
+                  }`}>
+                    {message.text}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400">
+                    <span>{message.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+
+                  {/* Optional rich idea cards when available */}
+                  {message.type === 'bot' && message.ideas && message.ideas.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {message.ideas.map((idea) => (
+                        <div
+                          key={idea.id}
+                          className={`border rounded-2xl p-2 text-xs ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-emerald-100 bg-emerald-50'}`}
+                        >
+                          <div className="font-semibold text-xs mb-1">{idea.title}</div>
+                          <div className="text-[11px] opacity-80 mb-1">Materials: {idea.materials?.join(', ')}</div>
+                          <div className="text-[11px] opacity-80 mb-1">Difficulty: {idea.difficulty}</div>
+                          {idea.summary && (
+                            <div className="text-[11px] opacity-90">{idea.summary}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+
+          {loading && (
+            <div className="flex justify-start mt-2">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" />
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce delay-150" />
+                <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce delay-300" />
+                <span>Thinking...</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input */}
+        <div className={`p-3 border-t ${darkMode ? 'border-gray-800 bg-gray-900' : 'border-slate-200 bg-white'}`}>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="Ask about recycling ideas..."
+              className={`flex-1 rounded-2xl px-3 py-2 text-sm outline-none ${
+                darkMode ? 'bg-gray-800 text-gray-100 placeholder-gray-500' : 'bg-slate-100 text-slate-900 placeholder-slate-400'
+              }`}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || loading}
+              className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold ${
+                !input.trim() || loading
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-green-500 hover:bg-green-600'
+              }`}
+            >
+              <Send size={18} />
+            </button>
+          </div>
+
+          {/* Quick prompts */}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {[
+              'Ideas with plastic bottles',
+              'Reuse old t-shirts',
+              'Cardboard projects for home',
+              'Kids craft with waste items'
+            ].map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => setInput(q)}
+                className={`px-3 py-1 rounded-full text-[11px] border ${darkMode ? 'border-gray-700 text-gray-300' : 'border-slate-200 text-slate-600'} bg-transparent`}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

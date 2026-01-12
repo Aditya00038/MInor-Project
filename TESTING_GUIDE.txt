@@ -1,0 +1,149 @@
+🎯 QUICK TEST GUIDE - CORS FIX VERIFICATION
+
+═══════════════════════════════════════════════════════════════════
+
+✅ BACKEND STATUS:
+─────────────────────────────────────────────────────────────────
+✓ Server Running: http://localhost:8000
+✓ API Docs: http://localhost:8000/docs
+✓ Uploads Endpoint: POST /api/uploads/upload
+✓ Static Files: GET /uploads/[filename]
+
+═══════════════════════════════════════════════════════════════════
+
+📋 STEP-BY-STEP TEST:
+─────────────────────────────────────────────────────────────────
+
+1. VERIFY BACKEND IS WORKING:
+   ✓ Open browser: http://localhost:8000/docs
+   ✓ Should see Swagger UI with endpoints
+   ✓ Look for "File Uploads" section
+
+2. TEST FILE UPLOAD ENDPOINT:
+   ✓ In Swagger UI, expand "File Uploads"
+   ✓ Click "POST /api/uploads/upload"
+   ✓ Click "Try it out"
+   ✓ Choose a test image/video file
+   ✓ Click "Execute"
+   ✓ Should see response:
+     {
+       "success": true,
+       "filename": "1705000000000_photo",
+       "url": "/uploads/1705000000000_photo",
+       ...
+     }
+
+3. VERIFY FILE UPLOAD WORKS:
+   ✓ Copy the URL from response: /uploads/1705000000000_photo
+   ✓ Open: http://localhost:8000/uploads/1705000000000_photo
+   ✓ Should display/download the file
+
+4. TEST IN CITIZENAPP:
+   ✓ Open CitizenApp: http://localhost:5173
+   ✓ Login with test account
+   ✓ Go to "Report Problem"
+   ✓ Fill out form:
+     - Category: Select one
+     - Description: "Test report"
+     - Location: Get Location (or type manually)
+     - Photo: Take a photo or upload image
+   ✓ Click "Submit Report"
+   ✓ Expected: ✓ Report submitted successfully
+   ✓ NO MORE CORS ERRORS in console
+
+5. VERIFY REPORT SAVED:
+   ✓ Go to "Track Reports" page
+   ✓ Should see your submitted report
+   ✓ Image should load (from backend /uploads/)
+   ✓ Status shows "submitted"
+
+═══════════════════════════════════════════════════════════════════
+
+🔍 DEBUGGING IF ISSUES OCCUR:
+─────────────────────────────────────────────────────────────────
+
+Issue: Upload endpoint returns 404
+✓ Fix: Check backend console for errors
+✓ Restart backend: Ctrl+C, then run:
+  cd "d:\Minor Project\backend"
+  venv\Scripts\python -m uvicorn main:app --reload
+
+Issue: File uploads but image doesn't show in report
+✓ Check: Browser DevTools → Network tab
+✓ Look for: GET /uploads/[filename]
+✓ Should return 200, not 404
+✓ If 404: File not saved properly
+
+Issue: CORS errors still appearing
+✓ Check: Browser console (F12 → Console)
+✓ Should NOT see "CORS policy" errors
+✓ If still appearing: Verify backend is running
+
+Issue: "Cannot POST /api/uploads/upload"
+✓ Backend not running or routes not loaded
+✓ Verify: http://localhost:8000/docs shows uploads section
+✓ If not: Restart backend
+
+═══════════════════════════════════════════════════════════════════
+
+📁 FILES CREATED/MODIFIED:
+─────────────────────────────────────────────────────────────────
+
+NEW:
+✓ backend/routes/uploads.py (File upload endpoint)
+✓ backend/uploads/ (Directory for uploaded files)
+
+MODIFIED:
+✓ backend/main.py (Added uploads router + static mount)
+✓ CitizenApp/src/pages/ReportProblem.jsx (Backend upload + fallback)
+✓ CitizenApp/src/pages/Donation.jsx (Backend upload + fallback)
+
+═══════════════════════════════════════════════════════════════════
+
+✨ EXPECTED WORKFLOW NOW:
+─────────────────────────────────────────────────────────────────
+
+OLD BROKEN FLOW:
+1. Click Submit
+2. Tries Firebase Storage upload
+3. ❌ CORS error blocked
+4. ❌ Continuously loading
+5. ❌ Report never submits
+
+NEW WORKING FLOW:
+1. Click Submit
+2. ✓ Uploads to backend (no CORS issues)
+3. ✓ File saved to backend/uploads/[timestamp]
+4. ✓ URL: http://localhost:8000/uploads/[filename]
+5. ✓ Report saved to Firestore with URL
+6. ✓ Shows "✓ Report submitted successfully"
+7. ✓ Image loads from backend
+8. ✓ Shows in "Track Reports" with image
+
+═══════════════════════════════════════════════════════════════════
+
+🎉 SUCCESS INDICATORS:
+─────────────────────────────────────────────────────────────────
+
+You'll know it's working when:
+✅ No CORS errors in browser console
+✅ File uploads complete in < 5 seconds
+✅ "Report submitted successfully" message appears
+✅ Image shows in report preview
+✅ Report appears in "Track Reports" page
+✅ Status shows as "submitted"
+✅ Points are awarded (+3 points)
+
+═══════════════════════════════════════════════════════════════════
+
+📝 NOTES:
+─────────────────────────────────────────────────────────────────
+
+• Backend upload is the PRIMARY solution
+• Firebase Storage is only a FALLBACK (if backend fails)
+• All uploads are served locally (no external dependencies)
+• File size limit: 50MB per file
+• Files stored in: backend/uploads/
+• Uploaded files are served at: http://localhost:8000/uploads/
+
+═══════════════════════════════════════════════════════════════════
