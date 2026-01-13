@@ -19,9 +19,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
+        "http://localhost:5173",  # CitizenApp
+        "http://localhost:5174",  # WorkersApp
+        "http://localhost:5175",  # GovtWeb
         "http://localhost:5176",
         "http://localhost:3000",
         "http://localhost:3001",
@@ -33,7 +33,7 @@ app.add_middleware(
 )
 
 # Import routes
-from routes import reports, donations, users, auth, uploads, chatbot
+from routes import reports, donations, users, auth, uploads, chatbot, admin, worker
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
@@ -42,6 +42,9 @@ app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(donations.router, prefix="/api/donations", tags=["Donations"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["File Uploads"])
 app.include_router(chatbot.router, prefix="/api/chatbot", tags=["Chatbot"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin & Departments"])
+app.include_router(worker.router, prefix="/api/worker", tags=["Worker"])
+
 
 # Serve uploaded files as static files
 uploads_dir = Path("uploads")

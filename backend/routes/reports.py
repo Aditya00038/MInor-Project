@@ -10,11 +10,26 @@ router = APIRouter()
 async def create_report(report: ReportCreate):
     """Create a new report"""
     try:
+        # Try to suggest department based on category
+        suggested_dept_id = None
+        try:
+            dept_query = """
+                SELECT d.id FROM category_department_map cdm
+                JOIN departments d ON cdm.department_id = d.id
+                WHERE LOWER(cdm.category) LIKE LOWER(%s)
+                LIMIT 1
+            """
+            dept_result = db.execute_query(dept_query, (f"%{report.category}%",), fetch=True)
+            if dept_result:
+                suggested_dept_id = dept_result[0]['id']
+        except:
+            pass  # Ignore if category mapping doesn't exist
+        
         query = """
             INSERT INTO reports 
             (user_id, category, description, location_text, city, state, country, 
-             latitude, longitude, image_url, video_url, points)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             latitude, longitude, image_url, video_url, points, status, suggested_department_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             1,  # TODO: Get from auth token
@@ -28,7 +43,9 @@ async def create_report(report: ReportCreate):
             report.longitude,
             report.image_url,
             report.video_url,
-            3  # Default 3 points
+            3,  # Default 3 points
+            'pending',  # New reports start as pending
+            suggested_dept_id
         )
         
         db.execute_query(query, params)
