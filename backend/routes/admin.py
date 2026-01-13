@@ -53,7 +53,7 @@ async def get_admin_stats():
                 "pending_count": db.execute_query("SELECT COUNT(*) as cnt FROM reports WHERE status = 'pending'", fetch=True)[0]['cnt'],
                 "approved_count": db.execute_query("SELECT COUNT(*) as cnt FROM reports WHERE status = 'approved'", fetch=True)[0]['cnt'],
                 "in_progress_count": db.execute_query("SELECT COUNT(*) as cnt FROM reports WHERE status IN ('assigned', 'in-progress')", fetch=True)[0]['cnt'],
-                "completed_count": db.execute_query("SELECT COUNT(*) as cnt FROM reports WHERE status = 'completed'", fetch=True)[0]['cnt'],
+                "completed_count": db.execute_query("SELECT COUNT(*) as cnt FROM reports WHERE status IN ('completed', 'done')", fetch=True)[0]['cnt'],
                 "rejected_count": db.execute_query("SELECT COUNT(*) as cnt FROM reports WHERE status = 'rejected'", fetch=True)[0]['cnt'],
                 "available_workers": db.execute_query("SELECT COUNT(*) as cnt FROM users WHERE role = 'worker' AND worker_status = 'available'", fetch=True)[0]['cnt'],
                 "busy_workers": db.execute_query("SELECT COUNT(*) as cnt FROM users WHERE role = 'worker' AND worker_status = 'busy'", fetch=True)[0]['cnt'],
@@ -387,7 +387,7 @@ async def get_department_stats(department_id: int):
                 (department_id,), fetch=True
             )[0]['cnt'],
             "completed_count": db.execute_query(
-                "SELECT COUNT(*) as cnt FROM reports WHERE department_id = %s AND status = 'completed'", 
+                "SELECT COUNT(*) as cnt FROM reports WHERE department_id = %s AND status IN ('completed', 'done')", 
                 (department_id,), fetch=True
             )[0]['cnt'],
             "total_workers": db.execute_query(
