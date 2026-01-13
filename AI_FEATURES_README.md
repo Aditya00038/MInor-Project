@@ -1,68 +1,182 @@
-# 🚀 AI-Powered Features Documentation
+# AI Features Documentation
 
-## 🎯 Overview
+## ⚠️ IMPORTANT UPDATE - January 2026
 
-This civic reporting platform includes two intelligent automation features designed to enhance user experience while maintaining strict privacy standards:
+### Feature Status
 
-1. **🌍 Automatic Geo-Tagging & Address Resolution** - Privacy-first location services
-2. **🤖 AI Image Classification** - Free, open-source problem category detection
+| Feature | Status | Details |
+|---------|--------|---------|
+| **Auto Geo-Tagging** | ✅ FULLY WORKING | Privacy-safe location detection |
+| **Image Classification** | ⚠️ TEMPORARILY DISABLED | API deprecated, researching alternatives |
 
 ---
 
-## 1. 🌍 Automatic Geo-Tagging
+## What Happened to Image Classification?
 
-### Features
-- **One-click location capture** using browser Geolocation API
-- **Privacy-respecting address resolution** via OpenStreetMap Nominatim
-- **No house numbers or exact addresses** exposed
-- **Graceful permission handling** with fallback options
-- **Mobile PWA compatible**
+**Hugging Face Free Inference API has been deprecated** as of January 2026.
+
+- **Error:** HTTP 410 Gone  
+- **Message:** "api-inference.huggingface.co is no longer supported"
+- **Paid Alternative:** `router.huggingface.co` (requires billing)
+- **Our Action:** Temporarily disabled until free alternative is found
+
+**Impact:** Users must manually select problem category from dropdown. All other features work normally.
+
+---
+
+## Feature 1: Auto Geo-Tagging ✅ WORKING
+
+### Overview
+Automatically detects user location and converts to privacy-safe address.
 
 ### How It Works
-
-```
-User clicks "Auto Location"
-    ↓
-Browser requests GPS permission
-    ↓
-Coordinates sent to backend
-    ↓
-OpenStreetMap reverse geocoding
-    ↓
-Privacy-filtered address returned
-    (Road/Area, Suburb, City, State)
-    ↓
-Displayed to user (no house numbers)
-```
+1. User clicks "Auto Location" button
+2. Browser Geolocation API gets GPS coordinates  
+3. Backend calls OpenStreetMap Nominatim API
+4. Privacy filter removes house numbers
+5. Address auto-fills with area/city/state only
 
 ### Privacy Guarantees
-- ✅ **No house numbers** - Only street/area names
-- ✅ **No building identifiers** - General location only
-- ✅ **Numeric coordinates stored internally** - For worker routing
-- ✅ **Human-readable address for display** - User-friendly UI
-- ✅ **Permission denial handled gracefully** - Manual entry fallback
+- ✅ No house numbers exposed
+- ✅ No exact building addresses  
+- ✅ Only general area shown (suburb/city/state)
+- ✅ OpenStreetMap respects privacy (no tracking)
+
+### Technical Implementation
+
+**Frontend (`CitizenApp/src/pages/ReportProblem.jsx`):**
+```javascript
+const getCurrentLocation = () => {
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude, longitude } = position.coords;
+      
+      const response = await fetch(`${BACKEND_URL}/api/reports/geocode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude, longitude })
+      });
+      
+      const data = await response.json();
+      setFormData(prev => ({
+        ...prev,
+        location_text: data.address.display_text,
+        latitude,
+        longitude
+      }));
+    },
+    (error) => {
+      // Handle permission denied / timeout
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+};
+```
+
+**Backend (`backend/routes/reports.py`):**
+```python
+@router.post("/geocode")
+async def reverse_geocode(data: Dict):
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+    
+    # Validate coordinates
+    if not await GeocodingService.validate_coordinates(latitude, longitude):
+        raise HTTPException(status_code=400, detail="Invalid coordinates")
+    
+    # Get privacy-safe address
+    address = await GeocodingService.reverse_geocode(latitude, longitude)
+    
+    return {
+        "success": True,
+        "address": address,
+        "coordinates": {"latitude": latitude, "longitude": longitude}
+    }
+```
+
+**Geocoding Service (`backend/utils/geocoding.py`):**
+```python
+class GeocodingService:
+    NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
+    
+    @staticmethod
+    async def reverse_geocode(latitude: float, longitude: float) -> Dict:
+        params = {
+            "format": "json",
+            "lat": latitude,
+            "lon": longitude,
+            "zoom": 18,
+            "addressdetails": 1
+        }
+        
+        headers = {
+            "User-Agent": "CivicReportApp/1.0"  # Required by Nominatim
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                GeocodingService.NOMINATIM_URL,
+                params=params,
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return GeocodingService._format_display_address(data.get("address", {}))
+    
+    @staticmethod
+    def _format_display_address(address: Dict) -> Dict:
+        # Privacy filter - REMOVE house_number, building, house_name
+        parts = []
+        if road := address.get("road"):
+            parts.append(road)
+        if suburb := address.get("suburb"):
+            parts.append(suburb)
+        if city := address.get("city") or address.get("town") or address.get("village"):
+            parts.append(city)
+        if state := address.get("state"):
+            parts.append(state)
+        if country := address.get("country"):
+            parts.append(country)
+        
+        return {
+            "road": address.get("road", ""),
+            "suburb": address.get("suburb", ""),
+            "city": city,
+            "state": address.get("state", ""),
+            "country": address.get("country", ""),
+            "display_text": ", ".join(parts)
+        }
+```
 
 ### API Endpoint
 
-**POST** `/api/reports/geocode`
+**Request:**
+```http
+POST http://localhost:8000/api/reports/geocode
+Content-Type: application/json
 
-```json
-Request:
 {
   "latitude": 28.6139,
   "longitude": 77.2090
 }
+```
 
-Response:
+**Response:**
+```json
 {
   "success": true,
   "address": {
-    "road": "Rajpath",
+    "road": "Connaught Place",
     "suburb": "Connaught Place",
     "city": "New Delhi",
     "state": "Delhi",
     "country": "India",
-    "display_text": "Rajpath, Connaught Place, New Delhi, Delhi"
+    "display_text": "Connaught Place, New Delhi, Delhi, India"
   },
   "coordinates": {
     "latitude": 28.6139,
@@ -71,337 +185,420 @@ Response:
 }
 ```
 
-### Frontend Usage
-
-```javascript
-// Automatic on page load
-useEffect(() => {
-  if (autoLocationEnabled) {
-    getCurrentLocation();
-  }
-}, []);
-
-// Manual trigger
-<button onClick={getCurrentLocation}>
-  Auto Location
-</button>
+### Testing
+```bash
+# Test with curl
+curl -X POST http://localhost:8000/api/reports/geocode \
+  -H "Content-Type: application/json" \
+  -d '{"latitude": 28.6139, "longitude": 77.2090}'
 ```
 
 ---
 
-## 2. 🤖 AI Image Classification
+## Feature 2: Image Classification ⚠️ DISABLED
 
-### Features
-- **Free Hugging Face Inference API** - No billing required
-- **Automatic category detection** from uploaded images
-- **Confidence scoring** - Shows prediction reliability
-- **Manual review option** - Low confidence → user verification
-- **Privacy-focused** - No face detection or personal data
-- **Modular design** - Easy to swap models or add custom ML
-
-### Supported Categories
-
-1. Garbage on Open Spaces
-2. Road Damage
-3. Drainage Issues
-4. Street Light Problem
-5. Water Leakage
-6. Pothole
-7. Accident Spot
-8. Broken Bench
-9. Park Issues
-10. Other
-
-### How It Works
-
+### Why It's Disabled
+Hugging Face deprecated their free inference API in January 2026. All requests return:
 ```
-User captures/uploads image
-    ↓
-Image sent to backend
-    ↓
-Hugging Face Vision Model (ViT)
-    ↓
-Label mapping to civic categories
-    ↓
-Confidence score calculated
-    ↓
-If confidence > 40%:
-   → Auto-fill category
-Else:
-   → Show suggestion + manual review
+HTTP 410 Gone
+Message: "api-inference.huggingface.co is no longer supported. Please use router.huggingface.co instead."
 ```
 
-### Model Architecture
+The new `router.huggingface.co` endpoint requires paid billing setup.
 
-- **Base Model**: `google/vit-base-patch16-224`
-- **Type**: Vision Transformer (ViT)
-- **Training**: ImageNet-21k → ImageNet-1k
-- **Free Tier**: Hugging Face Inference API
-- **Latency**: ~2-5 seconds (model loading + inference)
+### Current Behavior
+- Endpoint still exists but returns fallback response
+- No AI processing occurs
+- Users see warning message: "AI classification temporarily unavailable"
+- Manual category selection required
 
-### Label Mapping Strategy
+### Technical Implementation (Disabled)
 
-The system maps generic ImageNet labels to civic problem categories:
-
+**Backend (`backend/utils/image_classification.py`):**
 ```python
-CATEGORY_MAPPING = {
-    "trash can": "Garbage on Open Spaces",
-    "pothole": "Pothole",
-    "street light": "Street Light Problem",
-    "manhole": "Drainage Issues",
-    "water": "Water Leakage",
-    ...
-}
+class ImageClassificationService:
+    """Classification temporarily disabled - API deprecated"""
+    
+    API_URL = None  # Disabled
+    
+    @staticmethod
+    async def classify_image(image_bytes: bytes) -> Dict:
+        print("⚠️ Classification disabled: HuggingFace API deprecated")
+        return ImageClassificationService._fallback_response()
+    
+    @staticmethod
+    def _fallback_response() -> Dict:
+        return {
+            "predicted_category": "Other",
+            "confidence": 0.0,
+            "all_predictions": [],
+            "should_manual_review": True,
+            "message": "AI classification temporarily unavailable - Hugging Face API deprecated. Please select category manually."
+        }
 ```
 
-### API Endpoint
-
-**POST** `/api/reports/classify-image`
-
-```json
-Request: FormData with image file
-
-Response:
-{
-  "success": true,
-  "classification": {
-    "predicted_category": "Road Damage",
-    "confidence": 0.724,
-    "should_manual_review": false,
-    "message": "Category detected",
-    "all_predictions": [
-      {"label": "asphalt", "score": 0.724},
-      {"label": "street", "score": 0.185},
-      {"label": "road", "score": 0.091}
-    ]
-  },
-  "available_categories": [...]
-}
-```
-
-### Confidence Thresholds
-
-| Confidence | Action | UI Feedback |
-|------------|--------|-------------|
-| **> 0.6** | Auto-fill, high trust | ✅ Green badge, "Category detected" |
-| **0.4 - 0.6** | Auto-fill, suggest review | ⚠️ Yellow badge, "Please verify" |
-| **< 0.4** | Manual selection required | ⚠️ Yellow badge, "Low confidence" |
-
-### Privacy & Ethics
-
-✅ **No face detection** - Model not trained on faces  
-✅ **No personal identification** - Generic object recognition only  
-✅ **No background tracking** - One-time classification per image  
-✅ **No data retention** - Images not stored by Hugging Face  
-✅ **User control** - Can always override AI suggestion  
+### Future Plans
+Researching free alternatives:
+1. **TensorFlow.js** - Client-side classification (no backend needed)
+2. **Replicate.com** - Free tier available
+3. **Cloudflare Workers AI** - Free tier with limits
+4. **Self-hosted model** - MobileNet or EfficientNet
 
 ---
 
-## 🛠️ Setup Instructions
+## Setup Instructions
 
-### 1. Install Backend Dependencies
+### Prerequisites
+- Python 3.9+ with pip
+- Node.js 16+ with npm
+- MySQL 8.0+
+- Modern browser (Chrome/Firefox/Edge)
 
+### Backend Setup
+
+1. **Install dependencies:**
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-New dependencies:
-- `httpx` - Async HTTP client for API calls
-- `python-multipart` - File upload handling
+Required packages:
+- `fastapi` - Web framework
+- `uvicorn` - ASGI server
+- `httpx` - Async HTTP client for OpenStreetMap
+- `python-multipart` - File upload support
+- `mysql-connector-python` - Database
+- `python-dotenv` - Environment variables
 
-### 2. Configure Hugging Face API (Optional)
-
-Image classification requires a **free** Hugging Face API token:
-
-1. Sign up at [https://huggingface.co/](https://huggingface.co/)
-2. Go to [Settings → Tokens](https://huggingface.co/settings/tokens)
-3. Create a new token (read access)
-4. Add to `.env`:
-
-```env
-HUGGINGFACE_API_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-**Note**: If you leave this empty, image classification will be disabled gracefully. Users will select categories manually.
-
-### 3. Test Endpoints
-
+2. **Configure environment:**
 ```bash
-# Start backend
-cd backend
-python -m uvicorn main:app --reload
-
-# Test geocoding
-curl -X POST http://localhost:8000/api/reports/geocode \
-  -H "Content-Type: application/json" \
-  -d '{"latitude": 28.6139, "longitude": 77.2090}'
-
-# Test classification (with image file)
-curl -X POST http://localhost:8000/api/reports/classify-image \
-  -F "file=@test_image.jpg"
+cp .env.example .env
 ```
+
+Edit `.env`:
+```env
+# Database
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=citizen_app_db
+
+# Backend
+PORT=8000
+ENV=development
+
+# Note: HUGGINGFACE_API_TOKEN not needed (classification disabled)
+```
+
+3. **Start backend:**
+```bash
+python -m uvicorn main:app --reload
+```
+
+Backend runs on `http://localhost:8000`
+
+### Frontend Setup
+
+1. **Install dependencies:**
+```bash
+cd CitizenApp
+npm install
+```
+
+2. **Configure backend URL:**
+In `CitizenApp/src/pages/ReportProblem.jsx`:
+```javascript
+const BACKEND_URL = 'http://localhost:8000';  // Already set
+```
+
+3. **Start dev server:**
+```bash
+npm run dev
+```
+
+Frontend runs on `http://localhost:5173`
 
 ---
 
-## 📊 Architecture
+## Testing Guide
 
-### Modular Design
+### Test 1: Auto-Location (WORKING ✅)
 
+1. Open `http://localhost:5173`
+2. Navigate to "Report Problem" page
+3. Click "Auto Location" button  
+4. Browser asks for location permission - click "Allow"
+5. **Expected Result:**
+   - Address appears within 2-3 seconds
+   - Shows: "Connaught Place, New Delhi, Delhi, India"
+   - NO house numbers visible
+   - Location icon turns green with checkmark
+
+**Success Criteria:**
+- ✅ No errors in browser console
+- ✅ Address is human-readable
+- ✅ No house numbers shown
+- ✅ Latitude/longitude saved in form state
+
+**If it fails:**
+- Check browser console for errors
+- Verify backend is running (`http://localhost:8000/docs`)
+- Test geocode endpoint directly with curl
+- Check browser location permissions
+
+### Test 2: Image Classification (DISABLED ⚠️)
+
+1. On Report Problem page, click "Capture Photo" or upload image
+2. **Expected Result:**
+   - Photo appears in preview
+   - Yellow warning card appears:
+     - Icon: ⚠️ AlertCircle  
+     - Text: "AI classification temporarily unavailable"
+     - Message: "Please select category manually"
+   - Category dropdown remains empty (not auto-filled)
+
+3. **Action Required:**
+   - Manually select category from dropdown
+   - Continue with report submission
+
+**Success Criteria:**
+- ✅ Photo upload works
+- ✅ Warning message displays correctly
+- ✅ No errors in console
+- ✅ Report can be submitted after manual selection
+
+---
+
+## API Documentation
+
+### Geocoding Endpoint ✅
+
+**Endpoint:** `POST /api/reports/geocode`
+
+**Request Body:**
+```json
+{
+  "latitude": 28.6139,
+  "longitude": 77.2090
+}
 ```
-backend/
-├── utils/
-│   ├── geocoding.py           # OpenStreetMap integration
-│   └── image_classification.py # Hugging Face integration
-├── routes/
-│   └── reports.py             # API endpoints
-└── main.py                    # FastAPI app
 
-frontend/
-└── CitizenApp/src/pages/
-    └── ReportProblem.jsx       # Auto-location + AI UI
+**Response (Success):**
+```json
+{
+  "success": true,
+  "address": {
+    "road": "Connaught Place",
+    "suburb": "Connaught Place",
+    "city": "New Delhi",
+    "state": "Delhi",
+    "country": "India",
+    "display_text": "Connaught Place, New Delhi, Delhi, India"
+  },
+  "coordinates": {
+    "latitude": 28.6139,
+    "longitude": 77.2090
+  }
+}
 ```
 
-### Extensibility
-
-**Easy model replacement**:
-```python
-# Switch to custom model
-API_URL = "https://your-custom-model-endpoint"
+**Response (Error - Invalid Coordinates):**
+```json
+{
+  "detail": "Invalid coordinates"
+}
 ```
 
-**Add new categories**:
-```python
-# In image_classification.py
-CATEGORY_MAPPING = {
-    "new_label": "New Category",
-    ...
+**Rate Limits:**
+- OpenStreetMap: 1 request/second (fair use)
+- Our implementation: No artificial limits
+
+### Classification Endpoint ⚠️ (Disabled)
+
+**Endpoint:** `POST /api/reports/classify-image`
+
+**Request Body:** `multipart/form-data`
+```
+file: [image blob]
+```
+
+**Response (Always Fallback):**
+```json
+{
+  "success": true,
+  "classification": {
+    "predicted_category": "Other",
+    "confidence": 0.0,
+    "should_manual_review": true,
+    "message": "AI classification temporarily unavailable - Hugging Face API deprecated. Please select category manually.",
+    "all_predictions": []
+  },
+  "available_categories": [
+    "Garbage on Open Spaces",
+    "Road Damage",
+    "Drainage Issues",
+    "Street Light Problem",
+    "Water Leakage",
+    "Pothole",
+    "Accident Spot",
+    "Broken Bench",
+    "Park Issues",
+    "Other"
+  ]
 }
 ```
 
 ---
 
-## 🔒 Privacy & Security
+## Troubleshooting
 
-### Data Flow
+### Problem: "Location permission denied"
+**Solution:**
+1. Check browser address bar for location icon
+2. Click icon → Permissions → Location → Allow
+3. For Chrome: Settings → Privacy → Site Settings → Location
+4. Reload page and try again
 
-| Stage | Data | Privacy Protection |
-|-------|------|-------------------|
-| GPS capture | Exact coordinates | ✅ Never shown to user |
-| Geocoding | Street/area name | ✅ No house numbers |
-| Display | City, State only | ✅ Approximate location |
-| Storage | Coordinates + text | ✅ Both formats saved |
-| Image classification | Photo bytes | ✅ No faces, no tracking |
-| ML inference | Generic labels | ✅ No personal data |
+### Problem: "Location timeout"
+**Solution:**
+- Enable device GPS/location services
+- Try outdoors or near window (better GPS signal)
+- Increase timeout in code (currently 10s)
+- Use manual address entry as fallback
 
-### Permissions
+### Problem: "Geocoding failed"
+**Solution:**
+- Check backend is running: `http://localhost:8000/docs`
+- Test endpoint directly:
+  ```bash
+  curl -X POST http://localhost:8000/api/reports/geocode \
+    -H "Content-Type: application/json" \
+    -d '{"latitude": 28.6139, "longitude": 77.2090}'
+  ```
+- Check backend logs for errors
+- Verify internet connection (needs OpenStreetMap access)
 
-- **Location**: Optional, can be denied → manual entry
-- **Camera**: Optional, can be denied → gallery upload
-- **Files**: Optional, can skip media entirely
+### Problem: "Classification warning appears"
+**This is normal!** Classification is disabled. Just select category manually from dropdown.
 
----
-
-## 💰 Cost Analysis
-
-### 100% Free Implementation
-
-| Service | Tier | Cost | Limits |
-|---------|------|------|--------|
-| **OpenStreetMap Nominatim** | Free | $0 | 1 req/sec (fair use) |
-| **Hugging Face Inference API** | Free | $0 | Rate-limited (acceptable) |
-| **Browser Geolocation API** | Free | $0 | No limits |
-
-**Total Monthly Cost**: **$0** ✅
-
-### Scaling (Future)
-
-If you outgrow free tiers:
-- **Nominatim**: Self-host (open-source)
-- **Hugging Face**: Deploy custom model on Hugging Face Spaces (free tier)
-- **Alternative**: Use local ML models with TensorFlow.js
+### Problem: "CORS errors"
+**Solution:**
+- Verify backend CORS settings in `main.py`
+- Ensure frontend uses correct `BACKEND_URL`
+- Check browser console for specific CORS error
 
 ---
 
-## 🧪 Testing
+## Cost Analysis
 
-### Manual Testing
+| Service | Usage | Cost |
+|---------|-------|------|
+| OpenStreetMap Nominatim | Reverse geocoding | **$0/month** |
+| Browser Geolocation API | Built-in GPS | **$0/month** |
+| Hugging Face API | ~~Classification~~ DEPRECATED | N/A |
+| **TOTAL** | | **$0/month** |
 
-1. **Geo-tagging**:
-   - Click "Auto Location"
-   - Check browser permission prompt
-   - Verify address displayed (no house number)
-   - Try denying permission → manual entry works
-
-2. **Image Classification**:
-   - Upload garbage image → Check "Garbage on Open Spaces" detection
-   - Upload road damage → Check "Road Damage" or "Pothole"
-   - Upload random image → Check low confidence warning
-
-### Edge Cases
-
-| Scenario | Expected Behavior |
-|----------|-------------------|
-| Location permission denied | Manual entry available |
-| Geocoding API down | Show coordinates only |
-| HF token missing | Classification disabled, manual selection |
-| Low confidence (<0.4) | Yellow warning, suggest review |
-| Network timeout | Graceful fallback |
+**Notes:**
+- OpenStreetMap is free forever (fair use policy)
+- No API keys required for geocoding
+- No billing setup needed
+- Suitable for student/academic projects
 
 ---
 
-## 🚀 Future Enhancements
+## Future Enhancements
 
-### Planned Features
+### Short-term (Classification alternatives):
+1. **TensorFlow.js integration**
+   - Run MobileNet in browser
+   - No backend needed
+   - Works offline
+   - ~2MB model size
 
-1. **Custom ML Model Training**
-   - Fine-tune ViT on civic issues dataset
-   - Deploy on Hugging Face Spaces (free)
-   - Improve accuracy for local infrastructure
+2. **Replicate.com free tier**
+   - Free inference API
+   - Better models available
+   - Easy integration
 
-2. **Offline Mode**
-   - Cache OpenStreetMap tiles
-   - Download ML model for local inference
-   - Service Worker caching
+3. **Cloudflare Workers AI**
+   - Free tier: 10,000 requests/day
+   - Fast inference
+   - Global CDN
 
-3. **Multi-lingual Support**
-   - Translate categories
-   - Regional label mapping
-
-4. **Advanced Analytics**
-   - Track classification accuracy
-   - A/B test different models
-   - User feedback loop
-
----
-
-## 📚 References
-
-- [OpenStreetMap Nominatim](https://nominatim.org/release-docs/latest/)
-- [Hugging Face Inference API](https://huggingface.co/docs/api-inference/)
-- [Browser Geolocation API](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API)
-- [Vision Transformer (ViT) Paper](https://arxiv.org/abs/2010.11929)
+### Long-term:
+- Fine-tune custom civic issues model
+- Offline classification with cached models
+- Multi-lingual category translation
+- Advanced image preprocessing (blur faces/plates)
+- Mobile app with native camera integration
 
 ---
 
-## 🤝 Contributing
+## Architecture Diagrams
 
-To improve AI features:
+### Geo-Tagging Flow
+```
+User clicks "Auto Location"
+  ↓
+Browser Geolocation API → Gets GPS coordinates
+  ↓
+Frontend → POST /api/reports/geocode {lat, lng}
+  ↓
+Backend Geocoding Service → OpenStreetMap API
+  ↓
+Privacy Filter → Remove house numbers
+  ↓
+Return {road, suburb, city, state, country}
+  ↓
+Frontend → Auto-fill address field
+```
 
-1. Add more category mappings in `image_classification.py`
-2. Test with diverse civic issue images
-3. Fine-tune confidence thresholds
-4. Suggest better free ML models
+### Classification Flow (Current - Disabled)
+```
+User uploads photo
+  ↓
+Frontend → POST /api/reports/classify-image
+  ↓
+Backend → ImageClassificationService.classify_image()
+  ↓
+Return fallback response (no AI processing)
+  ↓
+Frontend → Show warning, require manual selection
+```
 
 ---
 
-## 📧 Support
+## Contributing
 
-For AI feature issues:
-- Location not working → Check browser permissions
-- Classification not working → Verify HF token in `.env`
-- Slow classification → Normal on first request (model loading)
+### Want to help restore classification?
+
+**Research these alternatives:**
+1. TensorFlow.js + MobileNet
+2. Replicate.com API
+3. Cloudflare Workers AI
+4. Other free ML APIs
+
+**Submit PR with:**
+- Updated `image_classification.py`
+- Working implementation
+- Documentation
+- Test results
 
 ---
 
-**Built with ❤️ for civic engagement**
+## Support
+
+**Issues? Questions?**
+- Check this README first
+- Review [QUICK_SETUP_AI.md](QUICK_SETUP_AI.md)
+- Open GitHub issue with:
+  - Feature affected (geo-tagging/classification)
+  - Error message
+  - Browser console logs
+  - Backend logs
+
+---
+
+Last updated: January 13, 2026  
+Location Feature: ✅ Fully Working  
+Classification Feature: ⚠️ Temporarily Disabled (API deprecated)
