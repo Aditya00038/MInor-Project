@@ -105,14 +105,14 @@ export default function ReportProblem() {
           console.error('Backend geocoding error, using fallback:', error);
           // Fallback: show coordinates only
           const location_text = `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`;
-          setLocationAddress(location_text);
+          setLocationAddress(`⚠️ ${location_text} (Address lookup failed - check backend connection)`);
           setFormData(prev => ({ 
             ...prev, 
             location_text,
             latitude,
             longitude 
           }));
-          setLocationStatus('success');
+          setLocationStatus('geocode-error');
           setTimeout(() => setLocationStatus(null), 3000);
         }
       },
@@ -473,6 +473,11 @@ export default function ReportProblem() {
               )}
               {locationStatus === 'error' && (
                 <p className="text-red-600 text-sm">Please enter location manually</p>
+              )}
+              {locationStatus === 'geocode-error' && (
+                <p className="text-orange-600 text-sm flex items-center gap-2">
+                  ⚠️ Got coordinates but address lookup failed. Make sure backend is running.
+                </p>
               )}
               {formData.location_text && (
                 <p className={`${colors.textSecondary} text-xs mt-2`}>📍 {formData.location_text}</p>
