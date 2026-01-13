@@ -1,11 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { MapPin, Camera, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { MapPin, Camera, X, AlertCircle, CheckCircle, Sparkles } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { motion } from 'framer-motion';
+
+const BACKEND_URL = 'http://localhost:8000';
 
 export default function ReportProblem() {
   const { currentUser } = useAuth();
@@ -29,6 +31,15 @@ export default function ReportProblem() {
   const [mediaType, setMediaType] = useState(null); // 'photo', 'video'
   const [locationStatus, setLocationStatus] = useState(null);
   const [locationAddress, setLocationAddress] = useState(''); // Store readable address
+  const [classificationResult, setClassificationResult] = useState(null);
+  const [autoLocationEnabled, setAutoLocationEnabled] = useState(true);
+
+  // Auto-fetch location on component mount if enabled
+  useEffect(() => {
+    if (autoLocationEnabled && !formData.latitude) {
+      getCurrentLocation();
+    }
+  }, [autoLocationEnabled]);
 
   const categories = [
     'Garbage on Open Spaces',
@@ -52,58 +63,79 @@ export default function ReportProblem() {
 
   async function getCurrentLocation() {
     setLocationStatus('getting');
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const latitude = position.coords.latitude;
-          const longitude = position.coords.longitude;
-          
-          // Get address from coordinates using reverse geocoding
-          try {
-            const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-            );
-            const data = await response.json();
-            
-            // Format: "City, State, Country"
-            const city = data.address?.city || data.address?.town || '';
-            const state = data.address?.state || '';
-            const country = data.address?.country || '';
-            const location_text = [city, state, country].filter(Boolean).join(', ');
-            
-            setLocationAddress(location_text || `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`);
-            setFormData(prev => ({ 
-              ...prev, 
-              location_text: location_text || `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`,
-              latitude,
-              longitude 
-            }));
-            setLocationStatus('success');
-            setTimeout(() => setLocationStatus(null), 3000);
-          } catch (error) {
-            console.error('Geocoding error:', error);
-            const location_text = `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`;
-            setLocationAddress(location_text);
-            setFormData(prev => ({ 
-              ...prev, 
-              location_text,
-              latitude,
-              longitude 
-            }));
-            setLocationStatus('success');
-            setTimeout(() => setLocationStatus(null), 3000);
-          }
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          setLocationStatus('error');
-          setTimeout(() => setLocationStatus(null), 3000);
-        }
-      );
-    } else {
+    
+    if (!navigator.geolocation) {
       setLocationStatus('error');
       setTimeout(() => setLocationStatus(null), 3000);
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        
+        // Use backend geocoding endpoint (privacy-safe, no house numbers)
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/reports/geocode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ latitude, longitude })
+          });
+          
+          if (!response.ok) throw new Error('Geocoding failed');
+          
+          const data = await response.json();
+          const addressData = data.address;
+          
+          // Use privacy-safe display text (no house numbers)
+          const displayAddress = addressData.display_text || `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`;
+          
+          setLocationAddress(displayAddress);
+          setFormData(prev => ({ 
+            ...prev, 
+            location_text: displayAddress,
+            latitude,
+            longitude 
+          }));
+          setLocationStatus('success');
+          setTimeout(() => setLocationStatus(null), 3000);
+          
+        } catch (error) {
+          console.error('Backend geocoding error, using fallback:', error);
+          // Fallback: show coordinates only
+          const location_text = `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`;
+          setLocationAddress(location_text);
+          setFormData(prev => ({ 
+            ...prev, 
+            location_text,
+            latitude,
+            longitude 
+          }));
+          setLocationStatus('success');
+          setTimeout(() => setLocationStatus(null), 3000);
+        }
+      },
+      (error) => {
+        console.error('Geolocation permission denied or error:', error);
+        setLocationStatus('error');
+        setTimeout(() => setLocationStatus(null), 3000);
+        
+        // Show helpful message based on error
+        if (error.code === error.PERMISSION_DENIED) {
+          alert('Location permission denied. Please enable location access in your browser settings to auto-fill address.');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          alert('Location unavailable. Please enter address manually.');
+        } else {
+          alert('Location timeout. Please try again or enter address manually.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
   }
 
   async function startCamera() {
@@ -131,7 +163,69 @@ export default function ReportProblem() {
         setPreview(canvasRef.current.toDataURL());
         setMediaType('photo');
         stopCamera();
+        // Automatically classify the captured image
+        classifyImage(blob);
       });
+    }
+  }
+
+  async function classifyImage(imageBlob) {
+    if (!imageBlob) return;
+    
+    try {
+      setClassificationResult({ loading: true });
+      
+      const formData = new FormData();
+      formData.append('file', imageBlob);
+      
+      const response = await fetch(`${BACKEND_URL}/api/reports/classify-image`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) throw new Error('Classification failed');
+      
+      const data = await response.json();
+      const classification = data.classification;
+      
+      setClassificationResult({
+        loading: false,
+        category: classification.predicted_category,
+        confidence: classification.confidence,
+        shouldReview: classification.should_manual_review,
+        message: classification.message
+      });
+      
+      // Auto-fill category if confidence is high
+      if (!classification.should_manual_review && classification.confidence > 0.4) {
+        setFormData(prev => ({
+          ...prev,
+          category: classification.predicted_category
+        }));
+      }
+      
+    } catch (error) {
+      console.error('Image classification error:', error);
+      setClassificationResult({
+        loading: false,
+        category: null,
+        confidence: 0,
+        shouldReview: true,
+        message: 'Auto-classification unavailable - please select category manually'
+      });
+    }
+  }
+
+  function handleFileUpload(e) {
+    const file = e.target.files[0];
+    if (file) {
+      setMedia(file);
+      setPreview(URL.createObjectURL(file));
+      setMediaType(file.type.startsWith('video/') ? 'video' : 'photo');
+      // Automatically classify uploaded image
+      if (file.type.startsWith('image/')) {
+        classifyImage(file);
+      }
     }
   }
 
@@ -146,6 +240,7 @@ export default function ReportProblem() {
     setMedia(null);
     setPreview(null);
     setMediaType(null);
+    setClassificationResult(null);
   }
 
   async function handleSubmit(e) {
@@ -405,21 +500,107 @@ export default function ReportProblem() {
                     </motion.button>
                   )}
                   {preview && (
-                    <div className="relative rounded-xl overflow-hidden shadow-lg">
-                      {mediaType === 'photo' ? (
-                        <img src={preview} alt="Captured" className="w-full h-auto" />
-                      ) : (
-                        <video src={preview} controls className="w-full h-auto" />
+                    <div className="space-y-3">
+                      <div className="relative rounded-xl overflow-hidden shadow-lg">
+                        {mediaType === 'photo' ? (
+                          <img src={preview} alt="Captured" className="w-full h-auto" />
+                        ) : (
+                          <video src={preview} controls className="w-full h-auto" />
+                        )}
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          type="button"
+                          onClick={removeMedia}
+                          className="absolute top-3 right-3 bg-red-600 text-white p-2 rounded-full shadow-lg hover:bg-red-700"
+                        >
+                          <X size={20} />
+                        </motion.button>
+                      </div>
+                      
+                      {/* AI Classification Result */}
+                      {classificationResult && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`p-4 rounded-xl ${
+                            classificationResult.loading
+                              ? darkMode ? 'bg-blue-900/30 border border-blue-700' : 'bg-blue-50 border border-blue-200'
+                              : classificationResult.shouldReview
+                              ? darkMode ? 'bg-yellow-900/30 border border-yellow-700' : 'bg-yellow-50 border border-yellow-200'
+                              : darkMode ? 'bg-green-900/30 border border-green-700' : 'bg-green-50 border border-green-200'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 mt-0.5">
+                              {classificationResult.loading ? (
+                                <div className="animate-spin text-blue-600">
+                                  <Sparkles size={20} />
+                                </div>
+                              ) : classificationResult.shouldReview ? (
+                                <AlertCircle size={20} className="text-yellow-600" />
+                              ) : (
+                                <CheckCircle size={20} className="text-green-600" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className={`font-semibold text-sm ${
+                                classificationResult.loading
+                                  ? 'text-blue-600'
+                                  : classificationResult.shouldReview
+                                  ? 'text-yellow-700'
+                                  : 'text-green-700'
+                              }`}>
+                                {classificationResult.loading ? 'AI analyzing image...' : '🤖 AI Suggestion'}
+                              </p>
+                              {!classificationResult.loading && (
+                                <>
+                                  <p className={`text-sm mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    {classificationResult.message}
+                                  </p>
+                                  {classificationResult.category && (
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <span className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Category:
+                                      </span>
+                                      <span className="px-2 py-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-semibold rounded-full">
+                                        {classificationResult.category}
+                                      </span>
+                                      <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        ({Math.round(classificationResult.confidence * 100)}% confidence)
+                                      </span>
+                                    </div>
+                                  )}
+                                  {classificationResult.shouldReview && (
+                                    <p className={`text-xs mt-2 ${darkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                                      💡 Tip: AI confidence is low. Please verify or change the category above.
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
                       )}
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        type="button"
-                        onClick={removeMedia}
-                        className="absolute top-3 right-3 bg-red-600 text-white p-2 rounded-full shadow-lg hover:bg-red-700"
-                      >
-                        <X size={20} />
-                      </motion.button>
+                      
+                      {/* File Upload Alternative */}
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          id="file-upload"
+                        />
+                        <label
+                          htmlFor="file-upload"
+                          className={`block text-center py-2 px-4 ${
+                            darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'
+                          } rounded-lg cursor-pointer hover:bg-opacity-80 transition-all text-sm`}
+                        >
+                          📎 Or upload from gallery
+                        </label>
+                      </div>
                     </div>
                   )}
                 </div>

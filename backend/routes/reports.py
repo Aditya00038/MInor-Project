@@ -1,9 +1,73 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from schemas import ReportCreate, ReportUpdate, ReportResponse
 from database import db
-from typing import List
+from typing import List, Dict
+from utils.geocoding import GeocodingService
+from utils.image_classification import ImageClassificationService
 
 router = APIRouter()
+
+# ===== GEOCODING ENDPOINT =====
+@router.post("/geocode")
+async def reverse_geocode(data: Dict):
+    """
+    Convert GPS coordinates to privacy-respecting address
+    Privacy: No house numbers or exact addresses exposed
+    """
+    try:
+        latitude = data.get("latitude")
+        longitude = data.get("longitude")
+        
+        if latitude is None or longitude is None:
+            raise HTTPException(status_code=400, detail="Latitude and longitude required")
+        
+        # Validate coordinates
+        if not await GeocodingService.validate_coordinates(latitude, longitude):
+            raise HTTPException(status_code=400, detail="Invalid coordinates")
+        
+        # Get privacy-safe address
+        address = await GeocodingService.reverse_geocode(latitude, longitude)
+        
+        return {
+            "success": True,
+            "address": address,
+            "coordinates": {
+                "latitude": latitude,
+                "longitude": longitude
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Geocoding failed: {str(e)}")
+
+# ===== IMAGE CLASSIFICATION ENDPOINT =====
+@router.post("/classify-image")
+async def classify_image(file: UploadFile = File(...)):
+    """
+    Classify civic problem from uploaded image
+    Uses free Hugging Face API - no billing required
+    Returns category suggestion with confidence score
+    """
+    try:
+        # Read image bytes
+        image_bytes = await file.read()
+        
+        if len(image_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Empty file")
+        
+        # Classify image
+        result = await ImageClassificationService.classify_image(image_bytes)
+        
+        return {
+            "success": True,
+            "classification": result,
+            "available_categories": ImageClassificationService.get_available_categories()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
 
 # ===== CREATE REPORT =====
 @router.post("/", response_model=ReportResponse)
